@@ -274,7 +274,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', 'sap/ui/core/LocaleDa
 		this._aVisibleAppointments = [];
 		this._aVisibleIntervalHeaders = [];
 
-		this.setStartDate(new Date());
+		this.setStartDate();
 
 		this._resizeProxy = jQuery.proxy(this.handleResize, this);
 
@@ -356,7 +356,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', 'sap/ui/core/LocaleDa
 
 		if (!oStartDate) {
 			//set default value
-			oStartDate = new Date();
+			var oStartDate = new Date();
+			oStartDate.setHours(0,0,0,0);
 		}
 
 		if (!(oStartDate instanceof Date)) {
