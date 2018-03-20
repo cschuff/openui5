@@ -3,9 +3,15 @@
  */
 
 // Provides control sap.m.Menu.
-sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Button', './Dialog', './NavContainer', './List', './Page', './MenuListItem', 'sap/ui/unified/Menu', 'sap/ui/Device', 'sap/ui/core/EnabledPropagator'],
-	function(jQuery, library, Control, Button, Dialog, NavContainer, List, Page, MenuListItem, UfdMenu, Device, EnabledPropagator) {
+sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Button', './Dialog', './NavContainer', './List', './Page', './MenuListItem', 'sap/ui/unified/Menu', 'sap/ui/unified/MenuItem', 'sap/ui/Device', 'sap/ui/core/EnabledPropagator'],
+	function(jQuery, library, Control, Button, Dialog, NavContainer, List, Page, MenuListItem, UfdMenu, UfdMenuItem, Device, EnabledPropagator) {
 		"use strict";
+
+		// shortcut for sap.m.ListType
+		var ListType = library.ListType;
+
+		// shortcut for sap.m.ListMode
+		var ListMode = library.ListMode;
 
 		/**
 		 * Constructor for a new Menu.
@@ -86,11 +92,28 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		Menu.UNIFIED_MENU_ITEMS_ID_SUFFIX = '-unifiedmenu';
 
 		/**
+		 * Map of all available properties in the sap.ui.unified.MenuItem.
+		 * Needed when syncs between sap.m.MenuItem and unified.MenuItem are performed.
+		 * @type {map}
+		 * @private
+		 */
+		Menu.UNFIFIED_MENU_ITEMS_PROPS = UfdMenuItem.getMetadata().getAllProperties();
+
+		/**
 		 * List items ID prefix.
 		 *
 		 * @type {string}
 		 */
 		Menu.LIST_ITEMS_ID_SUFFIX = '-menuinnerlist';
+
+
+		/**
+		 * Map of all available properties in the sap.m.MenuListItem
+		 * Needed when syncs between sap.m.MenuItem and sap.m.MenuListItem are performed.
+		 * @type {map}
+		 * @private
+		 */
+		Menu.MENU_LIST_ITEMS_PROPS = MenuListItem.getMetadata().getAllProperties();
 
 		/**
 		 * Initializes the control.
@@ -167,7 +190,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		 * @public
 		 */
 		Menu.prototype.close = function() {
-			if (sap.ui.Device.system.phone) {
+			if (Device.system.phone) {
 				this._getDialog().close();
 			} else {
 				this._getVisualParent().close();
@@ -188,6 +211,8 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 				]
 			});
 			oDialog.addStyleClass("sapMRespMenuDialog");
+			// remove padding for the menu on phone
+			oDialog.removeStyleClass("sapUiPopupWithPadding");
 			this.setAggregation("_dialog", oDialog, true);
 		};
 
@@ -291,10 +316,10 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 
 		Menu.prototype._initPageForParent = function(oParent) {
 			var aItems = oParent.getItems(),
-				isRootPage = oParent instanceof sap.m.Menu,
+				isRootPage = oParent instanceof Menu,
 				sPageTitle = isRootPage ? oParent.getTitle() : oParent.getText(),
 				oList = new List({
-					mode: sap.m.ListMode.None
+					mode: ListMode.None
 				}),
 				oPage = new Page({
 					title: sPageTitle,
@@ -348,7 +373,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 				oRb = sap.ui.getCore().getLibraryResourceBundle("sap.m"),
 				sParentPageTitle;
 
-			sParentPageTitle = oParentParent instanceof sap.m.Menu ? oParentParent.getTitle() : oParentParent.getText();
+			sParentPageTitle = oParentParent instanceof Menu ? oParentParent.getTitle() : oParentParent.getText();
 			sParentPageTitle = oRb.getText("MENU_PAGE_BACK_BUTTON") + " " + sParentPageTitle;
 			oPage.setNavButtonTooltip(sParentPageTitle);
 		};
@@ -356,7 +381,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		Menu.prototype._createMenuListItemFromItem = function(oItem) {
 			return new MenuListItem({
 				id  : this._generateListItemId(oItem.getId()),
-				type: sap.m.ListType.Active,
+				type: ListType.Active,
 				icon: oItem.getIcon(),
 				title: oItem.getText(),
 				startsSection: oItem.getStartsSection(),
@@ -367,7 +392,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		};
 
 		Menu.prototype._createVisualMenuItemFromItem = function(oItem) {
-			return new sap.ui.unified.MenuItem({
+			return new UfdMenuItem({
 				id  : this._generateUnifiedMenuItemId(oItem.getId()),
 				icon: oItem.getIcon(),
 				text: oItem.getText(),
@@ -430,8 +455,17 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 			oList.rerender();
 		};
 
-		Menu.prototype._addVisualItemFromItem = function(oItem, oControl, iIndex) {
-			if (!oControl) {
+		/**
+		 * Connects an instance of sap.ui.unified.MenuItem for given sap.m.MenuItem.
+		 * The sap.ui.unified.MenuItem is rendered to the end-user.
+		 * If there is an instance of sap.ui.unified.MenuItem already connected, this method does nothing.
+		 * @param {sap.m.MenuItem} oItem the item to assign a visual item for
+		 * @param {sap.ui.core.Control} oControl the container control
+		 * @param {int} iIndex the index of the given item inside the aggregation <items>
+		 * @private
+		 */
+		Menu.prototype._connectVisualItem = function(oItem, oControl, iIndex) {
+			if (!oControl || sap.ui.getCore().byId(oItem._getVisualControl())) {
 				return;
 			}
 
@@ -498,7 +532,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 			do {
 				aUnfdMenuItemStack.push(oCurrentUnfdMenuItem.getId());
 				oCurrentUnfdMenuItem = oCurrentUnfdMenuItem.getParent().getParent();
-			} while (oCurrentUnfdMenuItem instanceof sap.ui.unified.MenuItem);
+			} while (oCurrentUnfdMenuItem instanceof UfdMenuItem);
 
 			aItems = this.getItems();
 			do {
@@ -556,7 +590,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 			Control.prototype.addAggregation.apply(this, arguments);
 
 			if (sAggregationName === "items") {
-				this._addVisualItemFromItem(oObject, this._getVisualParent());
+				this._connectVisualItem(oObject, this._getVisualParent());
 			}
 
 			return this;
@@ -566,7 +600,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 			Control.prototype.insertAggregation.apply(this, arguments);
 
 			if (sAggregationName === "items") {
-				this._addVisualItemFromItem(oObject, this._getVisualParent(), iIndex);
+				this._connectVisualItem(oObject, this._getVisualParent(), iIndex);
 			}
 
 			return this;
@@ -596,8 +630,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 
 		Menu.prototype._removeVisualItem = function(oItem, oParentItem) {
 			var oVisualItem = sap.ui.getCore().byId(oItem._getVisualControl()),
-				vMenuOrList,
-				oPage;
+				vMenuOrList;
 
 			if (oVisualItem) {
 				vMenuOrList = oVisualItem.getParent();
@@ -608,10 +641,6 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 
 					//if this is the last item in the page, remove the page
 					if (vMenuOrList.getItems().length === 0) {
-						oPage = sap.ui.getCore().byId(oItem._getVisualParent());
-						this._getNavContainer().removePage(oPage);
-						oPage.destroy();
-
 						// now we need to update its parent list item - no to render its arrow and reset its visual child ref
 						if (oParentItem) {
 							oParentItem._setVisualChild(null);
@@ -623,8 +652,6 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 						vMenuOrList.rerender();
 					}
 				}
-				// destroy removed visual items from Menu or List
-				oVisualItem.destroy();
 			}
 		};
 
@@ -672,25 +699,27 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		 * @param {object} oEvent The event data object
 		 * @private
 		 */
-		Menu.prototype._onPropertyChanged = function(oEvent) {
+		Menu.prototype._onPropertyChanged = function (oEvent) {
 			var sPropertyKey = oEvent.getParameter("propertyKey"),
-				oPropertyValue = oEvent.getParameter("propertyValue");
+				oPropertyValue = oEvent.getParameter("propertyValue"),
+				mTargetMenuItemProps = Device.system.phone ? Menu.MENU_LIST_ITEMS_PROPS : Menu.UNFIFIED_MENU_ITEMS_PROPS,
+				fnGenerateTargetItemId = Device.system.phone ? this._generateListItemId : this._generateUnifiedMenuItemId,
+				sTargetItemId;
 
-			if (Device.system.phone) {
-				if (sPropertyKey === 'text') {
-					sPropertyKey = 'title';
-				}
+			if (Device.system.phone && sPropertyKey === 'text') {
+				sPropertyKey = 'title';
+			}
 
-				var sListItemId = this._generateListItemId(oEvent.getSource().getId());
-				!!sListItemId && sap.ui.getCore().byId(sListItemId).setProperty(sPropertyKey, oPropertyValue);
+			if (!mTargetMenuItemProps[sPropertyKey]) {
+				return;
+			}
+			sTargetItemId = fnGenerateTargetItemId(oEvent.getSource().getId());
 
-				if (this._getDialog().isOpen()) {
+			if (sTargetItemId) {
+				sap.ui.getCore().byId(sTargetItemId).setProperty(sPropertyKey, oPropertyValue);
+				if (Device.system.phone && this._getDialog().isOpen()) {
 					this._getDialog().close();
 				}
-			} else {
-				// try to find and update an unified menu item corresponding to the source instance on which a property was changed
-				var sUnifiedMenuItemId = this._generateUnifiedMenuItemId(oEvent.getSource().getId());
-				!!sUnifiedMenuItemId && sap.ui.getCore().byId(sUnifiedMenuItemId).setProperty(sPropertyKey, oPropertyValue);
 			}
 		};
 
@@ -743,7 +772,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 			var oLI;
 
 			if (oParentItem._getVisualChild()) { //this is not the first sub-item that is added
-				this._addVisualItemFromItem(oNewItem, sap.ui.getCore().byId(oParentItem._getVisualChild()), iInsertIndex);
+				this._connectVisualItem(oNewItem, sap.ui.getCore().byId(oParentItem._getVisualChild()), iInsertIndex);
 			} else {
 				if (Device.system.phone) {
 					this._initPageForParent(oParentItem);
@@ -792,7 +821,8 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 
 		/**
 		 * Opens the menu as a context menu.
-		 * @param {object} oEvent The event that is fired
+		 * @param {jQuery.Event | object} oEvent The event object or an object containing offsetX, offsetY
+		 * values and left, top values of the element's position
 		 * @param {object} oOpenerRef The reference of the opener
 		 */
 		Menu.prototype.openAsContextMenu = function(oEvent, oOpenerRef) {
@@ -829,4 +859,4 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		});
 
 		return Menu;
-	}, /* bExport= */ true);
+	});

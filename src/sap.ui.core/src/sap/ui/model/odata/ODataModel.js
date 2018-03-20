@@ -48,7 +48,6 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * @author SAP SE
 	 * @version ${version}
 	 *
-	 * @constructor
 	 * @public
 	 * @deprecated Please use {@link sap.ui.model.odata.v2.ODataModel} instead.
 	 * @alias sap.ui.model.odata.ODataModel
@@ -3099,7 +3098,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 *
 	 * Please note that deep creates (including data defined by navigationproperties) are not supported
 	 *
-	 * @param {String} sPath Name of the path to the collection
+	 * @param {string} sPath Name of the path to the collection
 	 * @param {array|object} vProperties An array that specifies a set of properties or the entry
 	 * @return {sap.ui.model.Context} oContext A Context object that point to the new created entry.
 	 * @public

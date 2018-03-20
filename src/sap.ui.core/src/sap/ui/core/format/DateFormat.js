@@ -17,11 +17,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	 * The DateFormat is a static class for formatting and parsing single date and time values or date and time intervals according
 	 * to a set of format options.
 	 *
-	 * Supported format options are pattern based on Unicode LDML Date Format notation.
+	 * Supported format options are pattern based on Unicode LDML Date Format notation. Please note that only a subset of the LDML date symbols
+	 * is supported.
 	 * If no pattern is specified a default pattern according to the locale settings is used.
 	 *
 	 * @public
-	 * @see http://unicode.org/reports/tr35/#Date_Field_Symbol_Table
+	 * @hideconstructor
+	 * @see http://unicode.org/reports/tr35/tr35-dates.html#Date_Field_Symbol_Table
 	 * @alias sap.ui.core.format.DateFormat
 	 */
 	var DateFormat = function() {
@@ -1023,13 +1025,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			name: "dayNumberOfWeek",
 			format: function(oField, oDate, bUTC, oFormat) {
 				var iDay = bUTC ? oDate.getUTCDay() : oDate.getDay();
-				var iFirstDayOfWeek = oFormat.oLocaleData.getFirstDayOfWeek();
-				var iDayNumberOfWeek = iDay - (iFirstDayOfWeek - 1);
-
-				if (iDayNumberOfWeek <= 0) {
-					iDayNumberOfWeek += 7;
-				}
-				return iDayNumberOfWeek;
+				return oFormat._adaptDayOfWeek(iDay);
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var sPart = oParseHelper.findNumbers(sValue, oPart.digits);
@@ -1660,13 +1656,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	// recreate javascript date object from the given oDateValues.
 	// In case of oDateValue.valid == false, null value will be returned
 	var fnCreateDate = function(oDateValue, sCalendarType, bUTC, bStrict) {
-		var oDate;
+		var oDate,
+			iYear = typeof oDateValue.year === "number" ? oDateValue.year : 1970;
 
 		if (oDateValue.valid) {
 			if (bUTC || oDateValue.tzDiff !== undefined) {
 				oDate = UniversalDate.getInstance(new Date(0), sCalendarType);
 				oDate.setUTCEra(oDateValue.era || UniversalDate.getCurrentEra(sCalendarType));
-				oDate.setUTCFullYear(oDateValue.year || 1970);
+				oDate.setUTCFullYear(iYear);
 				oDate.setUTCMonth(oDateValue.month || 0);
 				oDate.setUTCDate(oDateValue.day || 1);
 				oDate.setUTCHours(oDateValue.hour || 0);
@@ -1696,7 +1693,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			} else {
 				oDate = UniversalDate.getInstance(new Date(1970, 0, 1, 0, 0, 0), sCalendarType);
 				oDate.setEra(oDateValue.era || UniversalDate.getCurrentEra(sCalendarType));
-				oDate.setFullYear(oDateValue.year || 1970);
+				oDate.setFullYear(iYear);
 				oDate.setMonth(oDateValue.month || 0);
 				oDate.setDate(oDateValue.day || 1);
 				oDate.setHours(oDateValue.hour || 0);
@@ -2001,16 +1998,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	/**
 	 * Format a date relative to the current date.
 	 *
-	 * @param {Date} oDate the value to format
+	 * @param {Date} oJSDate the value to format
 	 * @param {boolean} bUTC whether to use UTC
 	 * @return {string} the formatted output value or null if relative formatting not possible
 	 * @private
 	 */
 	DateFormat.prototype.formatRelative = function(oJSDate, bUTC, aRange) {
 
-		var oToday = new Date(),
+		var oToday = new Date(), oDateUTC,
 			sScale = this.oFormatOptions.relativeScale || "day",
-			iToday, iDate, iDiff, sPattern, iDiffSeconds;
+			iDiff, sPattern, iDiffSeconds;
 
 		iDiffSeconds = (oJSDate.getTime() - oToday.getTime()) / 1000;
 		if (this.oFormatOptions.relativeScale == "auto") {
@@ -2023,16 +2020,22 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 
 		// For dates normalize to UTC to avoid issues with summer-/wintertime
 		if (sScale == "year" || sScale == "month" || sScale == "day") {
-			iToday = Date.UTC(oToday.getFullYear(), oToday.getMonth(), oToday.getDate());
+			oToday = new Date(Date.UTC(oToday.getFullYear(), oToday.getMonth(), oToday.getDate()));
+
+			oDateUTC = new Date(0);
+
 			if (bUTC) {
-				iDate = Date.UTC(oJSDate.getUTCFullYear(), oJSDate.getUTCMonth(), oJSDate.getUTCDate());
+				// The Date.UTC function doesn't accept years before 1900 (converts years before 100 into 1900 + years).
+				// Using setUTCFullYear to workaround this issue.
+				oDateUTC.setUTCFullYear(oJSDate.getUTCFullYear(), oJSDate.getUTCMonth(), oJSDate.getUTCDate());
 			} else {
-				iDate = Date.UTC(oJSDate.getFullYear(), oJSDate.getMonth(), oJSDate.getDate());
+				oDateUTC.setUTCFullYear(oJSDate.getFullYear(), oJSDate.getMonth(), oJSDate.getDate());
 			}
-			iDiffSeconds = (iDate - iToday) / 1000;
+
+			oJSDate = oDateUTC;
 		}
 
-		iDiff = this._getDifference(sScale, iDiffSeconds);
+		iDiff = this._getDifference(sScale, [oToday, oJSDate]);
 
 		if (this.oFormatOptions.relativeScale != "auto" && (iDiff < aRange[0] || iDiff > aRange[1])) {
 			//Relative parsing only in range +/- x days
@@ -2085,15 +2088,80 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		return sScale;
 	};
 
-	DateFormat.prototype._getDifference = function(sScale, iDiffSeconds) {
-		var iScaleSeconds = this._mScales[sScale],
-			iDiff = iDiffSeconds / iScaleSeconds;
-		if (iDiffSeconds > 0) {
-			iDiff = Math.floor(iDiff);
-		} else {
-			iDiff = Math.ceil(iDiff);
+	function cutDateFields(oDate, iStartIndex) {
+		var aFields = [
+			"FullYear",
+			"Month",
+			"Date",
+			"Hours",
+			"Minutes",
+			"Seconds",
+			"Milliseconds"
+		], sMethodName;
+
+		for (var i = iStartIndex; i < aFields.length; i++) {
+			sMethodName = "set" + aFields[iStartIndex];
+			oDate[sMethodName].apply(oDate, [0]);
 		}
-		return iDiff;
+	}
+
+	var mRelativeDiffs = {
+		year: function(oFromDate, oToDate) {
+			return oToDate.getFullYear() - oFromDate.getFullYear();
+		},
+		month: function(oFromDate, oToDate) {
+			return oToDate.getMonth() - oFromDate.getMonth() + (this.year(oFromDate, oToDate) * 12);
+		},
+		week: function(oFromDate, oToDate, oFormat) {
+			var iFromDay = oFormat._adaptDayOfWeek(oFromDate.getDay());
+			var iToDay = oFormat._adaptDayOfWeek(oToDate.getDay());
+
+			cutDateFields(oFromDate, 3);
+			cutDateFields(oToDate, 3);
+
+			return (oToDate.getTime() - oFromDate.getTime() - (iToDay - iFromDay) * oFormat._mScales.day * 1000) / (oFormat._mScales.week * 1000);
+		},
+		day: function(oFromDate, oToDate, oFormat) {
+			cutDateFields(oFromDate, 3);
+			cutDateFields(oToDate, 3);
+
+			return (oToDate.getTime() - oFromDate.getTime()) / (oFormat._mScales.day * 1000);
+		},
+		hour: function(oFromDate, oToDate, oFormat) {
+			cutDateFields(oFromDate, 4);
+			cutDateFields(oToDate, 4);
+
+			return (oToDate.getTime() - oFromDate.getTime()) / (oFormat._mScales.hour * 1000);
+		},
+		minute: function(oFromDate, oToDate, oFormat) {
+			cutDateFields(oFromDate, 5);
+			cutDateFields(oToDate, 5);
+
+			return (oToDate.getTime() - oFromDate.getTime()) / (oFormat._mScales.minute * 1000);
+		},
+		second: function(oFromDate, oToDate, oFormat) {
+			cutDateFields(oFromDate, 6);
+			cutDateFields(oToDate, 6);
+
+			return (oToDate.getTime() - oFromDate.getTime()) / (oFormat._mScales.second * 1000);
+		}
+	};
+
+	DateFormat.prototype._adaptDayOfWeek = function(iDayOfWeek) {
+		var iFirstDayOfWeek = this.oLocaleData.getFirstDayOfWeek();
+		var iDayNumberOfWeek = iDayOfWeek - (iFirstDayOfWeek - 1);
+
+		if (iDayNumberOfWeek <= 0) {
+			iDayNumberOfWeek += 7;
+		}
+		return iDayNumberOfWeek;
+	};
+
+	DateFormat.prototype._getDifference = function(sScale, aDates) {
+		var oFromDate = aDates[0];
+		var oToDate = aDates[1];
+
+		return Math.round(mRelativeDiffs[sScale](oFromDate, oToDate, this));
 	};
 
 

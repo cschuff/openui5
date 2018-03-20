@@ -34,14 +34,14 @@ sap.ui.define([
 	 * @param {string} mProperties.componentId - id of the component creating the view
 	 * @param {string} mPropertyBag.id - id of the processed view
 	 *
-	 * @returns {jquery.sap.promise} result of the processing, promise if executed asynchronously
+	 * @returns {Promise.<Node>|Node} result of the processing, promise if executed asynchronously
 	 *
 	 * @public
 	 */
 	XmlPreprocessorImpl.process = function(oView, mProperties){
 		try {
 			if (!mProperties || mProperties.sync) {
-				Utils.log.warning("Flexibility feature for applying changes on an XML view is only available for " +
+				jQuery.sap.log.warning("Flexibility feature for applying changes on an XML view is only available for " +
 					"asynchronous views; merge is be done later on the JS controls.");
 				return (oView);
 			}
@@ -89,7 +89,7 @@ sap.ui.define([
 	 * Asynchronous determination of a hash key for caching purposes
 	 *
 	 * @param {Node} oView XML node of the view for which the key should be determined
-	 * @returns {jquery.sap.promise} promise returning the hash key
+	 * @returns {Promise} promise returning the hash key
 	 *
 	 * @public
 	 */

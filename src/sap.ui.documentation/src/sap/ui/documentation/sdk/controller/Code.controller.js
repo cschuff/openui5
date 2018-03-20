@@ -7,10 +7,9 @@ sap.ui.define([
 		"jquery.sap.global",
 		"sap/ui/documentation/sdk/controller/BaseController",
 		"sap/ui/documentation/sdk/controller/util/ControlsInfo",
-		'sap/ui/Device',
-		'sap/m/MessageToast',
-		"sap/ui/model/json/JSONModel"
-	], function (jQuery, BaseController, ControlsInfo, Device, MessageToast, JSONModel) {
+		"sap/ui/model/json/JSONModel",
+		"sap/ui/core/Component" // implements sap.ui.component
+	], function (jQuery, BaseController, ControlsInfo, JSONModel) {
 		"use strict";
 
 		return BaseController.extend("sap.ui.documentation.sdk.controller.Code", {
@@ -29,6 +28,7 @@ sap.ui.define([
 				this.router.getRoute("code").attachPatternMatched(this.onRouteMatched, this);
 				this.router.getRoute("code_file").attachPatternMatched(this.onRouteMatched, this);
 				this._codeCache = {};
+				this._aFilesAvailable = [];
 
 				this._bFirstLoad = true;
 			},
@@ -39,6 +39,7 @@ sap.ui.define([
 			 * @private
 			 */
 			onRouteMatched: function (oEvt) {
+				this.getModel("headerView").setProperty("/bShowSubHeader", false);
 				this.showMasterSide();
 				this._sId = oEvt.getParameter("arguments").id;
 				this._sFileName = decodeURIComponent(oEvt.getParameter("arguments").fileName);
@@ -56,7 +57,7 @@ sap.ui.define([
 				// retrieve sample object
 				var oSample = oData.samples[this._sId];
 				if (!oSample) {
-					this.router.myNavToWithoutHash("sap.ui.documentation.sdk.view.NotFound", "XML", false, { path: this._sId });
+					this.router.myNavToWithoutHash("sap.ui.documentation.sdk.view.NotFound", "XML", false);
 					return;
 				}
 
@@ -101,11 +102,19 @@ sap.ui.define([
 								raw : sContent,
 								code : this._convertCodeToHtml(sContent)
 							});
+							this._aFilesAvailable.push(sFile);
 						}
 					}
 				} else {
 					this._oData.fileName = sFileName;
 				}
+
+				// we need this property to navigate to API reference
+				this.entityId = oSample.entityId;
+
+				this.getAPIReferenceCheckPromise(oSample.entityId).then(function (bHasAPIReference) {
+					this.getView().byId("apiRefButton").setVisible(bHasAPIReference);
+				}.bind(this));
 
 				// set model data
 				this.oModel.setData(this._oData);
@@ -114,13 +123,19 @@ sap.ui.define([
 					sFileName = this._getInitialFileName();
 				}
 
+				if (this._aFilesAvailable.indexOf(sFileName) === -1) {
+					this.router.myNavToWithoutHash("sap.ui.documentation.sdk.view.NotFound", "XML", false);
+					return;
+				}
+
 				// update <code>CodeEditor</code> content and the selected tab
 				this._updateCodeEditor(sFileName);
 				this._getTabHeader().setSelectedKey(sFileName);
 
 				// scroll to the top of the page
-				var page = this.getView().byId("page");
+				var page = this.byId("page");
 				page.scrollTo(0);
+
 			},
 
 			fetchSourceFile : function (sRef, sFile) {
@@ -236,6 +251,10 @@ sap.ui.define([
 				return sMockData;
 			},
 
+			onAPIRefPress: function () {
+				this.getRouter().navTo("apiId", {id: this.entityId});
+			},
+
 			onNavBack : function () {
 				this.router.navTo("sample", { id : this._sId }, true);
 			},
@@ -335,7 +354,7 @@ sap.ui.define([
 
 			_getCodeEditor : function() {
 				if (!this.oCodeEditor) {
-					this.oCodeEditor = this.getView().byId("codeEditor");
+					this.oCodeEditor = this.byId("codeEditor");
 				}
 
 				return this.oCodeEditor;
@@ -343,7 +362,7 @@ sap.ui.define([
 
 			_getTabHeader : function() {
 				if (!this.oTabHeader) {
-					this.oTabHeader = this.getView().byId("tabHeader");
+					this.oTabHeader = this.byId("tabHeader");
 				}
 
 				return this.oTabHeader;

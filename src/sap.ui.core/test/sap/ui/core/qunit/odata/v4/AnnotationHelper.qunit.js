@@ -3,17 +3,16 @@
  */
 sap.ui.require([
 	"jquery.sap.global",
+	"sap/ui/base/SyncPromise",
 	"sap/ui/core/Icon",
 	"sap/ui/model/Context",
 	"sap/ui/model/json/JSONModel",
 	"sap/ui/model/odata/_AnnotationHelperBasics",
 	"sap/ui/model/odata/v4/_AnnotationHelperExpression",
 	"sap/ui/model/odata/v4/AnnotationHelper",
-	"sap/ui/model/odata/v4/lib/_SyncPromise",
-	"sap/ui/model/odata/v4/ODataMetaModel",
-	"sap/ui/test/TestUtils"
-], function (jQuery, Icon, BaseContext, JSONModel, Basics, Expression, AnnotationHelper,
-		_SyncPromise, ODataMetaModel, TestUtils) {
+	"sap/ui/model/odata/v4/ODataMetaModel"
+], function (jQuery, SyncPromise, Icon, BaseContext, JSONModel, Basics, Expression,
+		AnnotationHelper, ODataMetaModel) {
 	/*global QUnit, sinon */
 	/*eslint no-warning-comments: 0 */
 	"use strict";
@@ -133,13 +132,9 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.v4.AnnotationHelper", {
 		beforeEach : function () {
-			this.oLogMock = sinon.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(jQuery.sap.log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
-		},
-
-		afterEach : function () {
-			this.oLogMock.verify();
 		}
 	});
 
@@ -161,7 +156,7 @@ sap.ui.require([
 			sPath;
 
 		this.mock(oMetaModel).expects("fetchEntityContainer").atLeast(1)
-			.returns(_SyncPromise.resolve(mScope));
+			.returns(SyncPromise.resolve(mScope));
 
 		for (sPath in mFixture) {
 			assert.strictEqual(
@@ -201,6 +196,13 @@ sap.ui.require([
 			assert.strictEqual(AnnotationHelper.getNavigationPath(sPath), mFixture[sPath], sPath);
 		}
 
+		// sinon-4 allows stubbing some library methods like filter
+		// assure that the split/filter/join function is not called if the path doesn't contain "."
+		this.mock(Array.prototype).expects("filter").never();
+
+		// code under test
+		assert.strictEqual(AnnotationHelper.getNavigationPath("EMPLOYEE_2_TEAM"),
+			"EMPLOYEE_2_TEAM", "EMPLOYEE_2_TEAM");
 	});
 
 	//*********************************************************************************************

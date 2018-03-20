@@ -32,6 +32,13 @@ describe('sap.m.Dialog', function() {
 		element(by.id('stretchedDialogCloseButton')).click();
 	});
 
+	it('should open stretched dialog with large contentHeight and contentWidth', function() {
+		element(by.id('stretchedDialogWithContentSizeButton')).click();
+		var stretchedDialog = element(by.id('stretchedDialogWithContentSize'));
+		expect(takeScreenshot(stretchedDialog)).toLookAs('dialog-stretched-with-content-size');
+		element(by.id('stretchedDialogWithContentSizeCloseButton')).click();
+	});
+
 	it('should open dialog with textarea', function() {
 		element(by.id('textareaDialogButton')).click();
 		var textAreaDialog = element(by.id('textAreaDialog'));
@@ -62,5 +69,12 @@ describe('sap.m.Dialog', function() {
 		expect(takeScreenshot(dialog)).toLookAs('dialog-with-3-custom-headers-toggle');
 
 		element(by.id('dialogWithCustomHeadersDialogCloseButton')).click();
+	});
+
+	it('should open error state dialog', function() {
+		element(by.id('dialogWithErrorStateButton')).click();
+		var dialogErrorState = element(by.id('dialogErrorState'));
+		expect(takeScreenshot(dialogErrorState)).toLookAs('error-state-dialog');
+		element(by.id('oDialogErrorStateOKButton')).click();
 	});
 });

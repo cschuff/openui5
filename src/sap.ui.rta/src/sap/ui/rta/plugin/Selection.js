@@ -6,9 +6,15 @@
 sap.ui.define([
 	'sap/ui/rta/plugin/Plugin',
 	'sap/ui/rta/Utils',
-	'sap/ui/fl/Utils'
+	'sap/ui/fl/Utils',
+	'sap/ui/dt/OverlayRegistry'
 ],
-function(Plugin, Utils, FlexUtils) {
+function(
+	Plugin,
+	Utils,
+	FlexUtils,
+	OverlayRegistry
+){
 	"use strict";
 
 	/**
@@ -162,7 +168,7 @@ function(Plugin, Utils, FlexUtils) {
 	};
 
 	Selection.prototype._selectOverlay = function (oEvent) {
-		var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
 		var bMultiSelection = oEvent.metaKey || oEvent.ctrlKey;
 		var oTargetClasses = oEvent.target.className;
 
@@ -189,13 +195,20 @@ function(Plugin, Utils, FlexUtils) {
 	 * @private
 	 */
 	Selection.prototype._onMouseDown = function(oEvent) {
+		// set focus after clicking, needed only for internet explorer
 		if (sap.ui.Device.browser.name == "ie"){
-			var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
-			if (oOverlay.getSelectable()){
-				oOverlay.focus();
-				oEvent.stopPropagation();
-			} else {
-				oOverlay.getDomRef().blur();
+			// when the EasyAdd Button is clicked, we don't want to focus/stopPropagation.
+			// but when the OverlayScrollContainer is the target, we want it to behave like a click on an overlay
+			var oTarget = OverlayRegistry.getOverlay(oEvent.target.id);
+			var bTargetIsScrollContainer = oEvent.target.className === "sapUiDtOverlayScrollContainer";
+			var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
+			if ((bTargetIsScrollContainer || oTarget instanceof sap.ui.dt.Overlay) && oOverlay instanceof sap.ui.dt.Overlay) {
+				if (oOverlay.getSelectable()){
+					oOverlay.focus();
+					oEvent.stopPropagation();
+				} else {
+					oOverlay.getDomRef().blur();
+				}
 			}
 		}
 	};
@@ -224,7 +237,7 @@ function(Plugin, Utils, FlexUtils) {
 		}
 
 		var oCurrentSelectedOverlay = oEvent.getParameter("selection")[oEvent.getParameter("selection").length - 1];
-		var aSelections = this.getDesignTime().getSelection();
+		var aSelections = this.getSelectedOverlays();
 		if (aSelections && aSelections.length === 1) {
 			oCurrentSelectedOverlay.setSelected(true);
 			return;
@@ -233,16 +246,18 @@ function(Plugin, Utils, FlexUtils) {
 			return;
 		}
 
-		//shared relevant container?
 		var bMultiSelectisValid = _hasSharedMultiSelectionPlugins(aSelections, this.getMultiSelectionRequiredPlugins())
-			&& _hasSharedRelevantContainer(aSelections);
+			&& _hasSharedRelevantContainer(aSelections)
+			&& (_hasSameParent(aSelections, oCurrentSelectedOverlay)
+				|| _isOfSameType(aSelections, oCurrentSelectedOverlay));
+
 		oCurrentSelectedOverlay.setSelected(bMultiSelectisValid);
 	};
 
 	function _hasSharedMultiSelectionPlugins(aSelections, aMultiSelectionRequiredPlugins){
 		var aSharedMultiSelectionPlugins = aMultiSelectionRequiredPlugins;
-		aSelections.forEach(function(oSelecedOverlay) {
-			var aEditableByPlugins = oSelecedOverlay.getEditableByPlugins();
+		aSelections.forEach(function(oSelectedOverlay) {
+			var aEditableByPlugins = oSelectedOverlay.getEditableByPlugins();
 			aSharedMultiSelectionPlugins = aSharedMultiSelectionPlugins.reduce(function(aSharedPlugins, sPluginName){
 				if (aEditableByPlugins.indexOf(sPluginName) !== -1){
 					aSharedPlugins.push(sPluginName);
@@ -261,6 +276,20 @@ function(Plugin, Utils, FlexUtils) {
 		var oPreviousRelevantContainer = oPreviousSelectedOverlay.getRelevantContainer();
 
 		return oCurrentRelevantContainer === oPreviousRelevantContainer;
+	}
+
+	function _hasSameParent(aSelections, oSelectedOverlay){
+		return !aSelections.some(function(oSelection){
+			return oSelection.getParentElementOverlay() !== oSelectedOverlay.getParentElementOverlay();
+		});
+	}
+
+	function _isOfSameType(aSelections, oSelectedOverlay){
+		var sSelectedOverlayElementName = oSelectedOverlay.getElement().getMetadata().getName();
+		return !aSelections.some(function(oSelection){
+			var sCurrentSelectionElementName = oSelection.getElement().getMetadata().getName();
+			return (sCurrentSelectionElementName !== sSelectedOverlayElementName);
+		});
 	}
 
 	return Selection;

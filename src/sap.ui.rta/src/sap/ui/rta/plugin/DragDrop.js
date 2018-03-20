@@ -7,12 +7,18 @@ sap.ui.define([
 	'jquery.sap.global',
 	'sap/ui/dt/plugin/ControlDragDrop',
 	'sap/ui/rta/plugin/RTAElementMover',
-	'sap/ui/rta/plugin/Plugin'
+	'sap/ui/rta/plugin/Plugin',
+	'sap/ui/rta/Utils',
+	'sap/ui/dt/OverlayRegistry'
 ],
-function(jQuery,
-		ControlDragDrop,
-		RTAElementMover,
-		Plugin) {
+function(
+	jQuery,
+	ControlDragDrop,
+	RTAElementMover,
+	Plugin,
+	Utils,
+    OverlayRegistry
+) {
 	"use strict";
 
 	/**
@@ -58,6 +64,11 @@ function(jQuery,
 		}
 	});
 
+	// Extends the DragDrop Plugin with all the functions from our rta base plugin
+	Utils.extendWith(DragDrop.prototype, Plugin.prototype, function(vDestinationValue, vSourceValue, sProperty, mDestination, mSource) {
+		return sProperty !== "getMetadata";
+	});
+
 	/**
 	 * @override
 	 */
@@ -72,17 +83,20 @@ function(jQuery,
 	};
 
 	/**
+	 * @override
+	 */
+	DragDrop.prototype._isEditable = function(oOverlay, mPropertyBag) {
+		return this.getElementMover().isEditable(oOverlay, mPropertyBag.onRegistration);
+	};
+
+	/**
 	 * Register an overlay
 	 * @param  {sap.ui.dt.Overlay} oOverlay overlay object
 	 * @override
 	 */
 	DragDrop.prototype.registerElementOverlay = function(oOverlay) {
 		ControlDragDrop.prototype.registerElementOverlay.apply(this, arguments);
-
-		if (oOverlay.isMovable()) {
-			this._attachMovableBrowserEvents(oOverlay);
-			Plugin.prototype.addToPluginsList.apply(this, arguments);
-		}
+		Plugin.prototype.registerElementOverlay.apply(this, arguments);
 	};
 
 	/**
@@ -125,7 +139,7 @@ function(jQuery,
 
 		ControlDragDrop.prototype.onDragStart.apply(this, arguments);
 
-		this.getDesignTime().getSelection().forEach(function(oOverlay) {
+		this.getSelectedOverlays().forEach(function(oOverlay) {
 			oOverlay.setSelected(false);
 		});
 
@@ -168,7 +182,7 @@ function(jQuery,
 	 * @private
 	 */
 	DragDrop.prototype._onMouseOver = function(oEvent) {
-		var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
 		if (oOverlay !== this._oPreviousHoverTarget) {
 			if (this._oPreviousHoverTarget) {
 				this._oPreviousHoverTarget.$().removeClass("sapUiRtaOverlayHover");

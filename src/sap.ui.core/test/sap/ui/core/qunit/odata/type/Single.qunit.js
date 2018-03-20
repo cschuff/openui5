@@ -23,13 +23,12 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.type.Single", {
 		beforeEach : function () {
-			this.oLogMock = sinon.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(jQuery.sap.log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 			sap.ui.getCore().getConfiguration().setLanguage("en-US");
 		},
 		afterEach : function () {
-			this.oLogMock.verify();
 			sap.ui.getCore().getConfiguration().setLanguage(sDefaultLanguage);
 		}
 	});
@@ -238,5 +237,18 @@ sap.ui.require([
 			oType.formatValue(42, "string");
 			sinon.assert.calledWithExactly(oSpy, oFixture.expect);
 		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("format: bad input type", function (assert) {
+		var oBadModelValue = new Date(),
+			oType = new Single();
+
+		["string", "int", "float"].forEach(function (sTargetType) {
+			assert.throws(function () {
+				oType.formatValue(oBadModelValue, sTargetType);
+			}, new FormatException("Illegal " + oType.getName() + " value: " + oBadModelValue));
+		});
+		assert.strictEqual(oType.formatValue(oBadModelValue, "any"), oBadModelValue);
 	});
 });

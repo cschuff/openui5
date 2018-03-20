@@ -48,6 +48,21 @@
 		sut.destroy();
 	});
 
+	QUnit.test("Should render TextArea correctly when _adjustHeight is called before the DOM is ready", function(assert) {
+		var sut = new sap.m.TextArea()
+
+		// act
+		sut._adjustHeight();
+		sut.placeAt("qunit-fixture");
+		sap.ui.getCore().applyChanges();
+
+		// assert
+		assert.ok(sut.getDomRef(), "TextArea rendered");
+
+		//Cleanup
+		sut.destroy();
+	});
+
 	QUnit.test("Should inherit from InputBase", function(assert) {
 		var sut = new sap.m.TextArea();
 		sut.placeAt("qunit-fixture");
@@ -405,6 +420,20 @@
 		oTA.destroy();
 	});
 
+    QUnit.test("after setValue the height is adjusted", function(assert) {
+        var sLongText = new Array(1000).join("text ");
+        var oTA = new sap.m.TextArea({
+            growing: true,
+            width: "100%"
+        }).placeAt("content");
+        sap.ui.getCore().applyChanges();
+
+        oTA.setValue(sLongText);
+        sap.ui.getCore().applyChanges();
+        assert.ok(oTA.getFocusDomRef().clientHeight >= 250, "TextArea height is adjusted");
+        oTA.destroy();
+    });
+
 	QUnit.test("height is adjust on resize event", function(assert) {
 		var fnOnResizeSpy,
 			sLongText = new Array(1000).join("text "),
@@ -441,6 +470,37 @@
 		oTA.focus();
 		assert.ok(oTA.getFocusDomRef().scrollHeight > oTA.getFocusDomRef().offsetHeight, "There is scroll bar. Whole content is not visible");
 		assert.ok(jQuery(oTA.getFocusDomRef()).css("max-height"), "There is a max-height defined");
+		oTA.destroy();
+	});
+
+	QUnit.test("Grow and shrink properly", function(assert) {
+		var sLongText = new Array(1000).join("text ");
+		var shortText = "Lorem ipsulum";
+		var oTA = new sap.m.TextArea({
+			value: sLongText,
+			growing: true,
+			growingMaxLines: 5,
+			width: "100%"
+		}).placeAt("content");
+		sap.ui.getCore().applyChanges();
+
+		var oDOMRef = oTA.getDomRef();
+		var initialHeight = oDOMRef.clientHeight;
+
+		//Act
+		oTA.setValue(shortText);
+		sap.ui.getCore().applyChanges();
+
+		//Assert
+		assert.ok(initialHeight > oDOMRef.clientHeight, "TextArea height should have been shrinked properly.");
+
+		//Act
+		oTA.setValue(sLongText);
+		sap.ui.getCore().applyChanges();
+
+		//Assert
+		assert.ok(initialHeight === oDOMRef.clientHeight, "TextArea height should have been extended properly.");
+
 		oTA.destroy();
 	});
 

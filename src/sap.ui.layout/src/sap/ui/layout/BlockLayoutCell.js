@@ -2,8 +2,8 @@
  * ${copyright}
  */
 
-sap.ui.define(['sap/ui/core/Control', './library', 'sap/ui/core/theming/Parameters'],
-	function (Control, library, Parameters) {
+sap.ui.define(['sap/ui/core/Control', './library', "./BlockLayoutCellRenderer"],
+	function(Control, library, BlockLayoutCellRenderer) {
 		"use strict";
 
 		/**
@@ -83,8 +83,8 @@ sap.ui.define(['sap/ui/core/Control', './library', 'sap/ui/core/theming/Paramete
 					 * The content to be included inside the cell
 					 */
 					content: {type: "sap.ui.core.Control", multiple: true, singularName: "content"}
-
-				}
+				},
+				designtime: "sap/ui/layout/designtime/BlockLayoutCell.designtime"
 			}
 		});
 
@@ -121,4 +121,4 @@ sap.ui.define(['sap/ui/core/Control', './library', 'sap/ui/core/theming/Paramete
 
 		return BlockLayoutCell;
 
-	}, /* bExport= */ true);
+	});

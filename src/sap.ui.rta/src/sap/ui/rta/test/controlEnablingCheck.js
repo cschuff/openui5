@@ -1,4 +1,4 @@
-/* global QUnit */
+/* global QUnit, sinon*/
 /*!
  * ${copyright}
  */
@@ -8,14 +8,16 @@ sap.ui.define(["sap/ui/core/UIComponent",
 	"sap/ui/core/mvc/XMLView",
 	"sap/ui/rta/command/CommandFactory",
 	"sap/ui/dt/DesignTime",
-	"sap/ui/dt/ElementUtil",
+	"sap/ui/dt/OverlayRegistry",
 	"sap/ui/dt/ElementDesignTimeMetadata",
 	"sap/ui/fl/ChangePersistenceFactory",
 	"sap/ui/fl/ChangePersistence",
 	"sap/ui/model/Model",
 	'sap/ui/fl/FlexControllerFactory',
 	'sap/ui/rta/ControlTreeModifier',
-	"sap/ui/fl/library" //we have to ensure to load fl, so that change handler gets registered
+	"sap/ui/fl/library", //we have to ensure to load fl, so that change handler gets registered,
+	'sap/ui/thirdparty/sinon',
+	'sap/ui/thirdparty/sinon-qunit'
 ],
 function(
 	UIComponent,
@@ -23,7 +25,7 @@ function(
 	XMLView,
 	CommandFactory,
 	DesignTime,
-	ElementUtil,
+	OverlayRegistry,
 	ElementDesignTimeMetadata,
 	ChangePersistenceFactory,
 	ChangePersistence,
@@ -54,10 +56,11 @@ function(
 	 *
 	 * @param {string}   sMsg - name of QUnit test - e.g. Checking the move action for a VerticalLayout control
 	 * @param {object}   mOptions - configuration for this controlEnablingCheck
-	 * @param {string}   mOptions.layer - (optional) flex layer used during testing, use it in case actions are enabled for other layers then CUSTOMER
-	 * @param {string}   mOptions.xmlView - XML view to adapt
-	 * @param {sap.ui.model.Model}   mOptions.model - any model to be assigned on the view
+	 * @param {string}   [mOptions.layer] - (optional) flex layer used during testing, use it in case actions are enabled for other layers then CUSTOMER
+	 * @param {string|object}   mOptions.xmlView - XML view content or all settings available to sap.ui.xmlView, to have a view to apply the action
+	 * @param {sap.ui.model.Model}   [mOptions.model] - any model to be assigned on the view
 	 * @param {string}   [mOptions.placeAt="content"] - Id of tag to place view at runtime
+	 * @param {boolean}   [mOptions.jsOnly] - set to true, if change handler cannot work on xml view
 	 * @param {object}   mOptions.action - action to operate on <code>mOptions.xmlView</code>
 	 * @param {string}   mOptions.action.name - name of the action - e.g. 'remove', 'move', 'rename'
 	 * @param {string}   mOptions.action.controlId - id of the control the action is executed with - may be the parent of the control beeing 'touched'
@@ -71,6 +74,12 @@ function(
 		// Return if controlEnablingCheck.only() has been used to exclude this call
 		if (controlEnablingCheck._only && (sMsg.indexOf(controlEnablingCheck._only) < 0)) { return; }
 
+		if (typeof mOptions.xmlView === "string"){
+			mOptions.xmlView = {
+				viewContent : mOptions.xmlView
+			};
+		}
+
 		// Do QUnit tests
 		QUnit.module(sMsg, {});
 
@@ -80,7 +89,7 @@ function(
 			assert.ok(mOptions.afterRedo, "then you implement a function to check if the redo has been successful: See the afterRedo parameter.");
 			assert.ok(mOptions.xmlView, "then you provide an XML view to test on: See the.xmlView parameter.");
 
-			var oXmlView = new DOMParser().parseFromString(mOptions.xmlView, "application/xml").childNodes[0];
+			var oXmlView = new DOMParser().parseFromString(mOptions.xmlView.viewContent, "application/xml").documentElement;
 			assert.ok(oXmlView.tagName.match( "View$"),"then you use the sap.ui.core.mvc View tag as the first tag in your view");
 
 			assert.ok(mOptions.action, "then you provide an action: See the action parameter.");
@@ -88,85 +97,94 @@ function(
 			assert.ok(mOptions.action.controlId, "then you provide the id of the control to operate the action on: See the action.controlId.");
 		});
 
-		QUnit.module(sMsg, {
-
-			beforeEach : function(assert){
-				// Create UI component containing the view to adapt
-
-				var Comp = UIComponent.extend("sap.ui.rta.control.enabling.comp", {
-					metadata: {
-						manifest : {
-							"sap.app": {
-								"id": "sap.ui.rta.control.enabling.comp",
-								"type": "application"
-							}
-						}
-					},
-					createContent : function() {
-						// store it in outer scope
-						var oView = sap.ui.xmlview({
-							 id : this.createId("view"),
-							 viewContent : mOptions.xmlView
-						 });
-						 return oView;
+		var UI_COMPONENT_NAME = "sap.ui.rta.control.enabling.comp";
+		var SYNC = false;
+		var ASYNC = true;
+		var Comp = UIComponent.extend(UI_COMPONENT_NAME, {
+			metadata: {
+				manifest : {
+					"sap.app": {
+						"id": UI_COMPONENT_NAME,
+						"type": "application"
 					}
-
-				});
-				this.oUiComponent = new Comp("comp");
-
-				// Place component in container and display
-				this.oUiComponentContainer = new ComponentContainer({
-					component : this.oUiComponent
-				});
-				this.oUiComponentContainer.placeAt(mOptions.placeAt || "content");
-
-				this.oView = this.oUiComponent.getRootControl();
-
-				if (mOptions.model instanceof Model) {
-					this.oView.setModel(mOptions.model);
 				}
+			},
+			createContent : function() {
+				var mViewSettings = jQuery.extend({}, mOptions.xmlView);
+				mViewSettings.id = this.createId("view");
+
+				if (mViewSettings.async === undefined){
+					// async = true will trigger the xml preprocessors on the xml view, but if defined preprocessors need async, we will always trigger async
+					mViewSettings.async = this.getComponentData().async;
+				}
+				var oView = sap.ui.xmlview(mViewSettings);
+				return oView;
+			}
+
+		});
+
+		// Create UI component containing the view to adapt
+		function createViewInComponent(bAsync){
+			this.oUiComponent = new Comp({
+				id: "comp",
+				componentData : {
+					async : bAsync
+				}
+			});
+
+			// Place component in container and display
+			this.oUiComponentContainer = new ComponentContainer({
+				component : this.oUiComponent
+			});
+			this.oUiComponentContainer.placeAt(mOptions.placeAt || "content");
+
+			this.oView = this.oUiComponent.getRootControl();
+
+			if (mOptions.model instanceof Model) {
+				this.oView.setModel(mOptions.model);
+			}
+
+			sap.ui.getCore().applyChanges();
+			return this.oView.loaded();
+		}
+
+		function buildCommand(assert){
+			this.oControl = this.oView.byId(mOptions.action.controlId);
+			return this.oControl.getMetadata().loadDesignTime(this.oControl).then(function(oDesignTimeMetadata) {
+				var mParameter;
+				if (mOptions.action.parameter) {
+					if (typeof mOptions.action.parameter === "function") {
+						mParameter =  mOptions.action.parameter(this.oView);
+					} else {
+						mParameter = mOptions.action.parameter;
+					}
+				} else {
+					mParameter = {};
+				}
+
 				sap.ui.getCore().applyChanges();
 
-				// Fetch command to operate - as well as its parameters, its control with design time meta data
-				this.oControl = this.oView.byId(mOptions.action.controlId);
-				return ElementUtil.loadDesignTimeMetadata(this.oControl)
+				this.oDesignTime = new DesignTime({
+					rootElements : [this.oView]
+				});
 
-				.then(function(oDesignTimeMetadata) {
-					var oElementDesignTimeMetadata = new ElementDesignTimeMetadata({ data : oDesignTimeMetadata});
-					var mParameter;
-
-					if (mOptions.action.parameter) {
-						if (typeof mOptions.action.parameter === "function") {
-							mParameter =  mOptions.action.parameter(this.oView);
-						} else {
-							mParameter = mOptions.action.parameter;
-						}
-					} else {
-						mParameter = {};
-					}
-
-					sap.ui.getCore().applyChanges();
-
-					this.oDesignTime = new DesignTime({
-						rootElements : [this.oView]
-					});
-
-					var done = assert.async();
+				return new Promise(function(resolve){
 					this.oDesignTime.attachEventOnce("synced", function() {
-						this.oControlOverlay = sap.ui.dt.OverlayRegistry.getOverlay(this.oControl);
+						this.oControlOverlay = OverlayRegistry.getOverlay(this.oControl);
 						var oCommandFactory = new CommandFactory({
 							flexSettings : {
 								layer : mOptions.layer || "CUSTOMER"
 							}
 						});
+						var oElementDesignTimeMetadata = this.oControlOverlay.getDesignTimeMetadata();
 						if (mOptions.action.name === "move") {
-							var oElementOverlay = sap.ui.dt.OverlayRegistry.getOverlay(mParameter.movedElements[0].element);
+							var oElementOverlay = OverlayRegistry.getOverlay(mParameter.movedElements[0].element);
 							var oRelevantContainer = oElementOverlay.getRelevantContainer();
 
 							this.oControl = oRelevantContainer;
 							oElementDesignTimeMetadata = oElementOverlay.getParentAggregationOverlay().getDesignTimeMetadata();
 						} else if (mOptions.action.name === "addODataProperty") {
-							var aAddODataPropertyActions = oElementDesignTimeMetadata.getAggregationAction("addODataProperty", this.oControl);
+							var aAddODataPropertyActions = oElementDesignTimeMetadata.getActionDataFromAggregations("addODataProperty", this.oControl);
 							assert.equal(aAddODataPropertyActions.length, 1, "there should be only one aggregation with the possibility to do addODataProperty action");
 							var oAggregationOverlay = this.oControlOverlay.getAggregationOverlay(aAddODataPropertyActions[0].aggregation);
 							oElementDesignTimeMetadata = oAggregationOverlay.getDesignTimeMetadata();
@@ -174,94 +192,66 @@ function(
 						this.oCommand = oCommandFactory.getCommandFor(this.oControl, mOptions.action.name, mParameter, oElementDesignTimeMetadata);
 
 						assert.ok(this.oCommand, "then the registration for action to change type, the registration for change and control type to change handler is available and " + mOptions.action.name + " is a valid action");
-						done();
+						resolve();
 					}.bind(this));
+				}.bind(this));
+			}.bind(this));
+		}
 
+		//XML View checks
+		if (!mOptions.jsOnly) {
+			QUnit.module(sMsg + " on async views", {
+				afterEach : function(){
+					this.oUiComponentContainer.destroy();
+					this.oDesignTime.destroy();
+					this.oCommand.destroy();
+				}
+			});
+
+			QUnit.test("When applying the change directly on the XMLView", function(assert){
+				// Stub LREP access to have the command as UI change (needs the view to build the correct ids)
+				var aChanges = [];
+				this.stub(ChangePersistence.prototype, "getChangesForComponent").returns(Promise.resolve(aChanges));
+				this.stub(ChangePersistence.prototype, "getCacheKey").returns(Promise.resolve("etag-123"));
+
+				return createViewInComponent.call(this, SYNC).then(function(){
+					return buildCommand.call(this, assert);
+				}.bind(this)).then(function(){
+					var oChange = this.oCommand.getPreparedChange();
+					aChanges.push(oChange);
+
+					//destroy and recreate component and view to get the changes applied
+					this.oUiComponentContainer.destroy();
+					return createViewInComponent.call(this, ASYNC);
+				}.bind(this)).then(function(oView){
+					// Verify that UI change has been applied on XML view
+					mOptions.afterAction(this.oUiComponent, oView, assert);
+				}.bind(this));
+
+			});
+		}
+
+		QUnit.module(sMsg, {
+
+			beforeEach : function(assert){
+				//no LREP response needed
+				this.sandbox = sinon.sandbox.create();
+				this.sandbox.stub(ChangePersistence.prototype, "getChangesForComponent").returns(Promise.resolve([]));
+				this.sandbox.stub(ChangePersistence.prototype, "getCacheKey").returns(ChangePersistence.NOTAG); //no cache key => no xml view processing
+
+				return createViewInComponent.call(this, SYNC).then(function(){
+					return buildCommand.call(this, assert);
 				}.bind(this));
 			},
 
 			afterEach : function(){
+				this.sandbox.restore();
 				this.oUiComponentContainer.destroy();
 				this.oDesignTime.destroy();
+				this.oCommand.destroy();
 			}
 		});
 
-		/*
-		// Apply change on XML view
-		// Commented as not yet supported by sap.ui.fl library and XML view processing of SAPUI5 core
-
-		QUnit.test("When applying the change directly on the XMLView", function(assert){
-
-			// Register prepocessor of sap.ui.fl library for xml view processing to support ui changes
-			XMLView.registerPreprocessor('viewxml', "sap.ui.fl.Preprocessor", true); // false);
-
-			// Activate UI change
-			var oChange = this.oCommand.getPreparedActionData();
-			var aChanges = [ oChange ];
-			var sUiComponentName = "sap.ui.rta.control.enabling.componentWithChangedXmlView";
-			var oChangePersistence = new ChangePersistence(sUiComponentName);
-			this.stub(ChangePersistenceFactory, "getChangePersistenceForComponent").returns(oChangePersistence);
-			var oChangePersistenceMock = this.stub(oChangePersistence, "getChangesForComponent").returns(Promise.resolve(aChanges));  // returns(aChanges); //returns(Promise.resolve(aChanges));
-
-			// Instantiate xml view with UI change
-			var that = this;
-			var UiComponentWithChangedXmlView = UIComponent.extend(sUiComponentName,{
-				metadata: {
-					manifest : {
-						"sap.app": {
-							"id": sUiComponentName,
-							"type": "application"
-						}
-					}
-				},
-				createContent : function() {
-					// store it in outer scope
-					that.oViewFromChangedXml = sap.ui.xmlview({
-						 id : this.createId("viewFromChangedXml"),
-						 viewContent : mOptions.xmlView,
-						 async : true
-					 });
-					 return that.oViewFromChangedXml;
-				}
-
-			});
-			this.oUiComponentWithChangedXmlView = new UiComponentWithChangedXmlView("componentWithChangedXmlView");
-
-			// Put view in UI component within UI component container and display
-			this.oUiComponentContainer = new ComponentContainer({
-				component : this.oUiComponentWithChangedXmlView
-			});
-			this.oUiComponentContainer.placeAt(mOptions.placeAt || "content");
-
-			sap.ui.getCore().applyChanges();
-
-			// Verify that UI change has been applied on XML view
-			mOptions.afterAction(this.oUiComponent, that.oViewFromChangedXml, assert);
-		});
-		*/
-
-		/*
-		Alternate approach to apply a change on an XML view: Here the check is to be done with the XMLTreeModifier
-		sap.ui.define(	[ ... "sap/ui/core/XMLTemplateProcessor", ..., "sap/ui/fl/changeHandler/XmlTreeModifier", "sap/ui/fl/changeHandler/JsControlTreeModifier" ],
-			function(... XMLTemplateProcessor, ..., XmlTreeModifier, JsControlTreeModifier) {...
-		QUnit.test("When applying the change directly on the XMLView", function(assert){
-
-				// Create parsed xml view with extended ids
-				var oXmlView = new DOMParser().parseFromString(mOptions.xmlView, "application/xml").childNodes[0];
-				var oXmlViewWithExtendedIds = XMLTemplateProcessor.enrichTemplateIds( oXmlView, this.oView);
-
-				// Apply change on xml view
-				var oChange = this.oCommand.getPreparedActionData();
-				var oChangeHandler = this.oCommand.getChangeHandler();
-				var oXmlControl = XmlTreeModifier.bySelector(oChange.getSelector(), this.oUiComponent, oXmlViewWithExtendedIds);
-				oChangeHandler.applyChange(oChange, oXmlControl, { modifier : XmlTreeModifier, appComponent : this.oUiComponent, view : oXmlViewWithExtendedIds });
-				sap.ui.getCore().applyChanges();
-
-				// Verify result
-				mOptions.afterAction(this.oUiComponent, oXmlViewWithExtendedIds, XmlTreeModifier, assert);
-		});
-		... );
-		*/
 
 		QUnit.test("When executing the underlying command on the control at runtime", function(assert){
 			var done = assert.async();

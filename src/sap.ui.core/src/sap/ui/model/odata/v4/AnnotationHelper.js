@@ -2,9 +2,8 @@
  * ${copyright}
  */
 sap.ui.define([
-	"../_AnnotationHelperBasics",
 	"./_AnnotationHelperExpression"
-], function (Basics, Expression) {
+], function (Expression) {
 	"use strict";
 
 	var rBadChars = /[\\\{\}:]/, // @see sap.ui.base.BindingParser: rObject, rBindingChars
@@ -27,7 +26,7 @@ sap.ui.define([
 			 * <code>com.sap.vocabularies.UI.v1.DataFieldAbstract</code> from the meta model. If no
 			 * <code>Label</code> property is available, but the data field has a <code>Value</code>
 			 * property with an <code>edm:Path</code> expression as value, the label will be taken
-			 * from the <code>com.sap.vocabularies.UI.v1.Label</code> annotation of the path's
+			 * from the <code>com.sap.vocabularies.Common.v1.Label</code> annotation of the path's
 			 * target property.
 			 *
 			 * Example:
@@ -134,7 +133,7 @@ sap.ui.define([
 					sPath = sPath.slice(0, -1);
 				}
 
-				if (sPath.indexOf(".")) {
+				if (sPath.indexOf(".") > -1) {
 					sPath = sPath.split("/")
 						.filter(function (sSegment) { // remove type casts
 							return sSegment.indexOf(".") < 0;

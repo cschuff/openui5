@@ -5,12 +5,16 @@ QUnit.config.autostart = false;
 sap.ui.require([
 	"sap/ui/rta/plugin/additionalElements/AdditionalElementsAnalyzer",
 	"sap/ui/dt/ElementUtil",
-	"sap/ui/model/json/JSONModel"
+	"sap/ui/model/json/JSONModel",
+	"sap/ui/layout/form/SimpleForm",
+	"sap/ui/layout/form/ResponsiveGridLayout"
 ],
 function(
 	AdditionalElementsAnalyzer,
 	ElementUtil,
-	JSONModel
+	JSONModel,
+	SimpleForm,
+	ResponsiveGridLayout
 ) {
 	"use strict";
 
@@ -19,7 +23,7 @@ function(
 	var mAddODataPropertyAction;
 	oView.getController().isDataReady().then(function () {
 		oGroup = oView.byId("GroupEntityType01");
-		return ElementUtil.loadDesignTimeMetadata(oGroup).then(function(oDesignTime) {
+		return oGroup.getMetadata().loadDesignTime().then(function(oDesignTime) {
 			mAddODataPropertyAction = oDesignTime.aggregations.formElements.actions.addODataProperty;
 			QUnit.start();
 		});
@@ -65,7 +69,9 @@ function(
 			// We expect only one element to be returned with a correct navigation property
 			assert.equal(aAdditionalElements.length, 2, "then there are 1 additional Elements available");
 			assert.equal(aAdditionalElements[0].label, oGroupElement1.getLabelText(), "the element with correct navigation binding should be in the list");
+			assert.equal(aAdditionalElements[0].tooltip, oGroupElement1.getLabelText(), "the label is used as tooltip for elements with navigation binding");
 			assert.equal(aAdditionalElements[1].label, oGroupElement3.getLabelText(), "the element with absolute binding should be in the list");
+			assert.equal(aAdditionalElements[1].tooltip, oGroupElement3.getLabelText(), "the label is used as tooltip for elements with absolute binding");
 		});
 	});
 
@@ -110,7 +116,7 @@ function(
 				tooltip : "idMain1--ObjectPageSectionStashed1",
 				type : "invisible",
 				elementId : "idMain1--ObjectPageSectionStashed1",
-				bindingPaths: []
+				bindingPaths: undefined
 			}, "the 1. stashed section is found", assert);
 			assertElementsEqual(aAdditionalElements[2], {
 				selected : false,
@@ -118,7 +124,7 @@ function(
 				tooltip : "idMain1--ObjectPageSectionStashed2",
 				type : "invisible",
 				elementId : "idMain1--ObjectPageSectionStashed2",
-				bindingPaths: []
+				bindingPaths: undefined
 			}, "the 2. stashed section is found", assert);
 		});
 	});
@@ -138,7 +144,7 @@ function(
 			assert.deepEqual(aAdditionalElements[0], {
 				selected : false,
 				label : "Entity1-Property06-Unbound",
-				tooltip : "Unbound Property",
+				tooltip : "Unbound Property6",
 				type : "odata",
 				entityType : "EntityType01",
 				name : "Property06",
@@ -150,7 +156,7 @@ function(
 			assert.deepEqual(aAdditionalElements[1], {
 				selected : false,
 				label : "Entity1-Property07-ignored-unbound",
-				tooltip : "Unbound Property",
+				tooltip : "Unbound Property7",
 				type : "odata",
 				entityType : "EntityType01",
 				name : "Property07",
@@ -191,7 +197,7 @@ function(
 			assert.deepEqual(aAdditionalElements[0], {
 				selected : false,
 				label : "Entity1-Property06-Unbound",
-				tooltip : "Unbound Property",
+				tooltip : "Unbound Property6",
 				type : "odata",
 				entityType : "EntityType01",
 				name : "Property06",
@@ -217,7 +223,7 @@ function(
 			assert.deepEqual(aAdditionalElements[0], {
 				selected : false,
 				label : "Entity1-Property06-Unbound",
-				tooltip : "Unbound Property",
+				tooltip : "Unbound Property6",
 				type : "odata",
 				entityType : "EntityType01",
 				name : "Property06",
@@ -229,7 +235,7 @@ function(
 			assert.deepEqual(aAdditionalElements[1], {
 				selected : false,
 				label : "Entity1-Property07-ignored-unbound",
-				tooltip : "Unbound Property",
+				tooltip : "Unbound Property7",
 				type : "odata",
 				entityType : "EntityType01",
 				name : "Property07",
@@ -352,8 +358,76 @@ function(
 			assert.equal(aAdditionalElements[0].label, "Renamed Label", "element with custom label renamed");
 			assert.equal(aAdditionalElements[0].originalLabel, "EntityType02_Property03", "element contains original label from oData and not custom label");
 			assert.equal(aAdditionalElements[0].type, "invisible", "element made invisible");
+			assert.equal(aAdditionalElements[0].tooltip, "Entity2-EntityType02_Property03-QuickInfo (from annotation)", "quickinfo annotation is used as tooltip also for hidden elements, if available");
 			assert.equal(aAdditionalElements[1].originalLabel, "", "element contains original label blank as it was not renamed");
 			assert.equal(aAdditionalElements[1].type, "invisible", "element made invisible");
+			assert.equal(aAdditionalElements[1].tooltip, "ComplexProperty 01-QuickInfo", "sap:quickinfo is used as tooltip");
+		});
+	});
+
+	QUnit.test("when getting invisible elements of a bound group containing a removed field with absolute binding pointing to another entity", function(assert) {
+		var oGroup = oView.byId("OtherGroup");
+		var oGroupElement1 = oView.byId("NavForm.EntityType01.Prop1");
+		oGroupElement1.setVisible(false);
+		sap.ui.getCore().applyChanges();
+
+		var oActionsObject = {
+			aggregation: "formElements",
+			reveal : {
+				elements : [oGroupElement1],
+				types : {
+					"sap.ui.comp.smartform.GroupElement" : {
+						action : {
+							//nothing relevant for the analyzer
+						}
+					}
+				}
+			},
+			addODataProperty : {
+				action : {
+					//not relevant for test
+				}
+			}
+		};
+
+		function fnIsFieldPresent(oElement) {
+			return oElement.label === oGroupElement1.getLabelText();
+		}
+
+		return AdditionalElementsAnalyzer.enhanceInvisibleElements(oGroup, oActionsObject).then(function(aAdditionalElements) {
+			assert.ok(aAdditionalElements.some(fnIsFieldPresent), "then the field is available on the dialog");
+		});
+	});
+
+	QUnit.test("when getting invisible elements of a bound group containing a field with the same property name as the one of an invisible field in a different entity", function(assert) {
+		var oGroup = oView.byId("GroupEntityType01");
+		var oGroupElement1 = oView.byId("EntityType02.CommonProperty");
+
+		var oActionsObject = {
+			aggregation: "formElements",
+			reveal : {
+				elements : [oGroupElement1],
+				types : {
+					"sap.ui.comp.smartform.GroupElement" : {
+						action : {
+							//nothing relevant for the analyzer
+						}
+					}
+				}
+			},
+			addODataProperty : {
+				action : {
+					//not relevant for test
+				}
+			}
+		};
+
+		function fnIsFieldPresent(oElement) {
+			return oElement.label === oGroupElement1.getLabelText();
+		}
+
+		return AdditionalElementsAnalyzer.enhanceInvisibleElements(oGroup, oActionsObject).then(function(aAdditionalElements) {
+			assert.notOk(aAdditionalElements.some(fnIsFieldPresent), "then the other field is not available on the dialog");
 		});
 	});
 
@@ -399,7 +473,7 @@ function(
 		var aFormElements = oSimpleForm.getAggregation("form").getFormContainers().reduce(function(aAllFormElements, oFormContainer){
 			return aAllFormElements.concat(oFormContainer.getFormElements());
 		},[]).filter(function(oFormElement){
-			return oFormElement.getVisible() === false;
+			return oFormElement.isVisible() === false;
 		});
 
 		var oActionsObject = {
@@ -495,9 +569,10 @@ function(
 		};
 
 		return AdditionalElementsAnalyzer.getUnboundODataProperties(oSimpleForm, oActionObject).then(function(aAdditionalElements) {
-			assert.equal(aAdditionalElements.length, 4, "then 4 unbound elements are available");
+			assert.equal(aAdditionalElements.length, 5, "then 5 unbound elements are available");
 		});
 	});
+
 
 	QUnit.module("Given a test view with bound Table", {
 		beforeEach : function() {
@@ -517,6 +592,7 @@ function(
 		});
 	});
 
+
 	QUnit.module("Given a test view with bound Empty Table", {
 		beforeEach : function(assert) {
 			this.oTable = oView.byId("emptyTable");
@@ -532,6 +608,40 @@ function(
 
 		return AdditionalElementsAnalyzer.getUnboundODataProperties(this.oTable, oActionObject).then(function(aAdditionalElements) {
 			assert.equal(aAdditionalElements.length, 4, "then the correct amount of ODataProperties has been returned");
+		});
+	});
+
+
+	QUnit.module("Given a test view with absolute bindings", {
+		beforeEach: function(assert) {
+			this.oList = oView.byId("listWithAbsoluteBinding");
+			this.oTable = oView.byId("tableWithAbsoluteBinding");
+		}
+	});
+
+	QUnit.test("when getting unbound elements for the list", function(assert) {
+		var oActionObject = {
+			action : {
+				aggregation: "items"
+			},
+			relevantContainer: this.oList
+		};
+
+		return AdditionalElementsAnalyzer.getUnboundODataProperties(this.oList, oActionObject).then(function(aAdditionalElements) {
+			assert.equal(aAdditionalElements.length, 16, "then the correct amount of ODataProperties has been returned");
+		});
+	});
+
+	QUnit.test("when getting unbound elements for the table", function(assert) {
+		var oActionObject = {
+			action : {
+				aggregation: "items"
+			},
+			relevantContainer: this.oTable
+		};
+
+		return AdditionalElementsAnalyzer.getUnboundODataProperties(this.oTable, oActionObject).then(function(aAdditionalElements) {
+			assert.equal(aAdditionalElements.length, 16, "then the correct amount of ODataProperties has been returned");
 		});
 	});
 

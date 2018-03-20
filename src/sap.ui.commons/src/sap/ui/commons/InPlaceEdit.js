@@ -3,8 +3,26 @@
  */
 
 // Provides control sap.ui.commons.InPlaceEdit.
-sap.ui.define(['jquery.sap.global', './TextField', './TextView', './library', 'sap/ui/core/Control', 'sap/ui/core/ValueStateSupport', 'sap/ui/core/theming/Parameters'],
-	function(jQuery, TextField, TextView, library, Control, ValueStateSupport, Parameters) {
+sap.ui.define([
+    'jquery.sap.global',
+    './TextField',
+    './TextView',
+    './library',
+    'sap/ui/core/Control',
+    'sap/ui/core/ValueStateSupport',
+    'sap/ui/core/theming/Parameters',
+    "./InPlaceEditRenderer"
+],
+	function(
+	    jQuery,
+		TextField,
+		TextView,
+		library,
+		Control,
+		ValueStateSupport,
+		Parameters,
+		InPlaceEditRenderer
+	) {
 	"use strict";
 
 	/**
@@ -21,7 +39,7 @@ sap.ui.define(['jquery.sap.global', './TextField', './TextView', './library', 's
 	 * @constructor
 	 * @public
 	 * @since 1.8.0
-	 * @deprecated Since version 1.38.
+	 * @deprecated as of version 1.38, replaced by {@link sap.m.Input}
 	 * @alias sap.ui.commons.InPlaceEdit
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */

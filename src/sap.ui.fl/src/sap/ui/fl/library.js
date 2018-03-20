@@ -20,14 +20,18 @@ sap.ui.define([
 	sap.ui.getCore().initLibrary({
 		name: "sap.ui.fl",
 		version: "${version}",
+		controls: ["sap.ui.fl.variants.VariantManagement"],
 		dependencies: [
 			"sap.ui.core", "sap.m"
 		],
+		designtime: "sap/ui/fl/designtime/library.designtime",
 		extensions: {
 			"sap.ui.support": {
 				diagnosticPlugins: [
 					"sap/ui/fl/support/Flexibility"
-				]
+				],
+				//Configuration used for rule loading of Support Assistant
+				publicRules:true
 			}
 		}
 	});
@@ -36,4 +40,4 @@ sap.ui.define([
 
 	return sap.ui.fl;
 
-}, /* bExport= */true);
+});

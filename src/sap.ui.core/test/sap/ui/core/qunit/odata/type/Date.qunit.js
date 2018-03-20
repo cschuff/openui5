@@ -5,9 +5,10 @@ sap.ui.require([
 	"jquery.sap.global",
 	"sap/ui/core/format/DateFormat",
 	"sap/ui/model/odata/type/Date",
-	"sap/ui/model/odata/type/ODataType"
-], function (jQuery, DateFormat, DateType, ODataType) {
-	/*global QUnit, sinon */
+	"sap/ui/model/odata/type/ODataType",
+	"sap/ui/test/TestUtils"
+], function (jQuery, DateFormat, DateType, ODataType, TestUtils) {
+	/*global QUnit */
 	/*eslint no-warning-comments: 0 */ //no ESLint warning for TODO list
 	"use strict";
 
@@ -20,7 +21,7 @@ sap.ui.require([
 	 */
 	function checkError(assert, oType, oValue, sReason, sAction) {
 		var fnExpectedException;
-		sap.ui.test.TestUtils.withNormalizedMessages(function () {
+		TestUtils.withNormalizedMessages(function () {
 			try {
 				if (sAction === "parseValue") {
 					fnExpectedException = sap.ui.model.ParseException;
@@ -40,13 +41,12 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.type.Date", {
 		beforeEach : function () {
-			this.oLogMock = sinon.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(jQuery.sap.log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 			sap.ui.getCore().getConfiguration().setLanguage("en-US");
 		},
 		afterEach : function () {
-			this.oLogMock.verify();
 			sap.ui.getCore().getConfiguration().setLanguage(this.sDefaultLanguage);
 		},
 

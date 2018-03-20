@@ -31,6 +31,19 @@
 		<script>
 
 			jQuery.sap.require("sap.ui.model.type.Date");
+			jQuery.sap.require("sap.ui.unified.CalendarLegend");
+			jQuery.sap.require("sap.ui.unified.CalendarLegendRenderer");
+			jQuery.sap.require("sap.ui.unified.CalendarRowRenderer");
+			jQuery.sap.require("sap.ui.unified.CalendarLegendItem");
+			jQuery.sap.require("sap.ui.core.InvisibleText");
+
+			var CalendarLegend = sap.ui.unified.CalendarLegend,
+				CalendarLegendRenderer = sap.ui.unified.CalendarLegendRenderer,
+				CalendarLegendItem = sap.ui.unified.CalendarLegendItem,
+				CalendarDayType = sap.ui.unified.CalendarDayType,
+				CalendarRowRenderer = sap.ui.unified.CalendarRowRenderer,
+				InvisibleText = sap.ui.core.InvisibleText;
+
 			var oFormatYyyyMMddHHmm = sap.ui.core.format.DateFormat.getInstance({pattern: "yyyyMMddHHmm", calendarType: sap.ui.core.CalendarType.Gregorian});
 
 			var sSelectedAppointmentId = "";
@@ -315,12 +328,11 @@
 			QUnit.test("Row", function(assert) {
 				assert.ok(!jQuery("#Row1").attr("style"), "Row1: no width and heigh set");
 				assert.ok(!jQuery("#Row1").attr("title"), "Row1: no tooltip set");
-				assert.equal(jQuery("#Row1").attr("tabindex"), "-1", "Row1: tabindex set");
+				assert.equal(jQuery("#Row1").attr("tabindex"), undefined, "Row1: no tab index should be set");
 
 				assert.equal(jQuery("#Row2").css("width"), "500px", "Row2: width set");
 				assert.equal(jQuery("#Row2").css("height"), "100px", "Row2: height set");
 				assert.equal(jQuery("#Row2").attr("title"), "Row tooltip", "Row2: tooltip set");
-				assert.equal(jQuery("#Row2").attr("tabindex"), "0", "Row2: tabindex set");
 			});
 
 			QUnit.test("Appointments row", function(assert) {
@@ -875,7 +887,7 @@
 			});
 
 			QUnit.test("click on appointment", function(assert) {
-				var sSelectedTextId = sap.ui.unified.CalendarRow._oStaticSelectedText.getId();
+				var sSelectedTextId = InvisibleText.getStaticId("sap.ui.unified", "APPOINTMENT_SELECTED");
 				var sAriaLabel1, sAriaLabel2, sAriaLabel3;
 				// initialize Row1
 				initializeRow1();
@@ -1120,6 +1132,38 @@
 				assert.equal(oRow2._getVisibleAppointments().length, 1, "The number of visible appointments is as expected");
 			});
 
+			QUnit.test("_setCustomAppointmentsSorterCallback after initial rendering", function (assert) {
+				//arrange and act
+				var $Appointment1 = jQuery("#App1");
+
+				oRow1._setCustomAppointmentsSorterCallback(function(oApp1, oApp2) {
+					if (oApp1.getType() > oApp2.getType()) {
+						return 1;
+					}
+					if (oApp1.getType() < oApp2.getType()) {
+						return -1;
+					}
+					return 0;
+				});
+				sap.ui.getCore().applyChanges();
+				assert.equal(oRow1._aVisibleAppointments[0].level, "0", "Appointment1 now has level 0");
+
+			});
+
+			QUnit.test("_setCustomAppointmentsSorterCallback", function (assert) {
+				//arrange and act
+				var fnCustom = this.spy();
+				oRow1._setCustomAppointmentsSorterCallback(fnCustom);
+				oRow1.placeAt('uiArea3');
+				sap.ui.getCore().applyChanges();
+
+				//assert
+				assert.equal(oRow1._fnCustomSortedAppointments, fnCustom,
+						"_setCustomAppointmentsSorterCallback sets a function to the _fnCustomSortedAppointments");
+				assert.ok(fnCustom.callCount > 0,
+						"_setCustomAppointmentsSorterCallback calls the custom sort function");
+			});
+
 		QUnit.module("RTL", {
 				beforeEach: function () {
 					//Arrange
@@ -1251,8 +1295,9 @@
 						sLocalizedEnd = that.sut._oRb.getText("CALENDAR_END_TIME"),
 						sFormattedEndDate = that.sut._oFormatAria.format(oAppointment.getEndDate()),
 						sTooltip = oAppointment.getTooltip() || "";
+						sType = oAppointment.getType() !== CalendarDayType.None ? "; " + CalendarLegendRenderer.getTypeAriaText(oAppointment.getType()).getText() : "";
 
-					return sLocalizedStart + ": " + sFormattedStartDate + "; " + sLocalizedEnd + ": " + sFormattedEndDate + "; " + sTooltip;
+					return sLocalizedStart + ": " + sFormattedStartDate + "; " + sLocalizedEnd + ": " + sFormattedEndDate + "; " + sTooltip + sType;
 				},
 				aAppointments = this.sut.getAppointments();
 
@@ -1264,12 +1309,39 @@
 					oAppointmentDescElement = oAppointment.$("Descr");
 
 				if (oAppointmentDescElement.length) {
-					assert.strictEqual(sExpectedDescription, oAppointmentDescElement.text(), "The text node of the appointment " + iIndex + " 'aria-describedby' element has correct value");
+					assert.strictEqual(oAppointmentDescElement.text(), sExpectedDescription, "The text node of the appointment " + iIndex + " 'aria-describedby' element has correct value");
 				} else {
 					assert.ok(true, "The appointment " + iIndex + " is not displayed in the current viewport");
 				}
 			});
 		});
+
+		QUnit.module("Pure unit testing");
+			QUnit.test("CalendarRowRender.getAriaTextForType", function () {
+				//Prepare
+				var aLegendItems1to2 =
+						[
+							new CalendarLegendItem({type: CalendarDayType.Type01, text: "Day off"}),
+							new CalendarLegendItem({type: CalendarDayType.Type02, text: "On Duty"})
+						],
+					sResult1,
+					sResult2,
+					sResult3;
+
+				//Act
+				sResult1 = CalendarRowRenderer.getAriaTextForType(CalendarDayType.Type01, aLegendItems1to2);
+				sResult2 = CalendarRowRenderer.getAriaTextForType(CalendarDayType.Type03, aLegendItems1to2);
+				sResult3 = CalendarRowRenderer.getAriaTextForType(CalendarDayType.Type03);
+
+				//Assert
+				assert.equal(sResult1, "Day off", "When the given type  matches legend item's type");
+				assert.equal(sResult2, CalendarLegendRenderer.typeARIATexts[CalendarDayType.Type03].getText(),
+					"When the given type does not match legend item's type");
+				assert.equal(sResult2, CalendarLegendRenderer.typeARIATexts[CalendarDayType.Type03].getText(),
+					"When the legendItems is not given");
+
+				//Cleanup - nothing to lean
+			});
 
 	</script>
 

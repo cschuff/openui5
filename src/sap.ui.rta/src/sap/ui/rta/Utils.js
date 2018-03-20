@@ -8,14 +8,16 @@ sap.ui.define([
 	'sap/ui/fl/Utils',
 	'sap/ui/dt/OverlayUtil',
 	'sap/ui/dt/OverlayRegistry',
-	'sap/ui/fl/registry/Settings'
+	'sap/ui/fl/registry/Settings',
+	'sap/m/MessageBox'
 ],
 function(
 	jQuery,
 	FlexUtils,
 	OverlayUtil,
 	OverlayRegistry,
-	Settings
+	Settings,
+	MessageBox
 ) {
 	"use strict";
 
@@ -41,7 +43,7 @@ function(
 
 	Utils._sFocusableOverlayClass = ".sapUiDtOverlaySelectable";
 
-	Utils._sRtaStyleClassName = "";
+	Utils._sRtaStyleClassName = null;
 
 	/**
 	 * Returns the rta specific Style Class
@@ -61,11 +63,7 @@ function(
 		if (sLayer === "USER") {
 			Utils._sRtaStyleClassName = "";
 		} else if (FlexUtils.getLayerIndex(sLayer) > -1) {
-			if (sap.ui.getCore().getConfiguration().getTheme() === "sap_belize") {
-				Utils._sRtaStyleClassName = "sapContrast";
-			} else if (sap.ui.getCore().getConfiguration().getTheme() === "sap_belize_plus") {
-				Utils._sRtaStyleClassName = "sapContrastPlus";
-			}
+			Utils._sRtaStyleClassName = "sapContrast sapContrastPlus";
 		}
 	};
 
@@ -86,21 +84,6 @@ function(
 			}
 			return false;
 		});
-	};
-
-	/**
-	 * Utility function for retrieving designtime metadata from the relevant container for a specified overlay object
-	 *
-	 * @param {sap.ui.dt.Overlay} oOverlay - Overlay object
-	 * @returns {Object|undefined} Metadata object or false if there is no aggregation
-	 */
-	Utils.getRelevantContainerDesigntimeMetadata = function(oOverlay) {
-		var oRelevantContainer = oOverlay.getRelevantContainer();
-		if (!oRelevantContainer || !oOverlay.getParent()) {
-			return undefined;
-		}
-		var oRelevantContainerOverlay = OverlayRegistry.getOverlay(oRelevantContainer);
-		return oRelevantContainerOverlay ? oRelevantContainerOverlay.getDesignTimeMetadata() : undefined;
 	};
 
 	/**
@@ -228,6 +211,7 @@ function(
 					oFragmentDialog = sap.ui.xmlfragment("sap.ui.rta.view.RemoveElementDialog", oFragmentController);
 					oFragmentDialog.setModel(oModel);
 				}
+				oFragmentDialog.addStyleClass(Utils.getRtaStyleClassName());
 				oFragmentDialog.open();
 			}
 		);
@@ -500,10 +484,10 @@ function(
 	};
 
 	/**
-	 * Fetching entity metadata by specified path
+	 * Fetching entity metadata by specified path.
 	 * @param {sap.ui.model.Model} oModel - Model
-	 * @param {String} sPath - Path to resolve
-	 * @returns {Object|null} - Plain object with entity description
+	 * @param {string} sPath Path to resolve
+	 * @returns {Object|null} Plain object with entity description
 	 */
 	Utils.getEntityTypeByPath = function (oModel, sPath) {
 		return oModel.oMetadata._getEntityTypeByPath(sPath);
@@ -515,11 +499,15 @@ function(
 	 *
 	 * TODO: replace with lodash.mergeWith when it's available
 	 *
-	 * @param mDestination {Object} - Destionation object
-	 * @param mSource {Object} - Source object
-	 * @param fnCustomizer {Function} - The customizer is invoked with five arguments:
-	 *                                  (vDestinationValue, vSourceValue, sProperty, mDestination, mSource).
-	 * @return {Object} - returns mDestination object
+	 * @param {Object} mDestination Destination object
+	 * @param {Object} mSource Source object
+	 * @param {function} fnCustomizer The customizer is invoked with the following five arguments:
+	 *                                  vDestinationValue: Value of the property in the destination object
+	 *                                  vSourceValue: Value of the property in the source object
+	 *                                  sProperty: Property being processed
+	 *                                  mDestination: Destination object
+	 *                                  mSourve: Source object
+	 * @return {Object} - Returns <code>mDestination</code> object
 	 */
 	Utils.mergeWith = function (mDestination, mSource, fnCustomizer) {
 		if (!(typeof fnCustomizer === "function")) {
@@ -535,12 +523,85 @@ function(
 						sSourceProperty,
 						mDestination,
 						mSource
-						)
-					: mSource[sSourceProperty];
+					) : mSource[sSourceProperty];
 			}
 		}
 
 		return mDestination;
+	};
+
+	/**
+	 * Extending helper which allows custom function
+	 * for extending.
+	 *
+	 * @param {Object} mDestination - Destionation object
+	 * @param {Object} mSource - Source object
+	 * @param {Function} fnCustomizer - The customizer is invoked with five arguments:
+	 *                                  (vDestinationValue, vSourceValue, sProperty, mDestination, mSource).
+	 */
+	Utils.extendWith = function (mDestination, mSource, fnCustomizer) {
+		if (!(typeof fnCustomizer === "function")) {
+			throw new Error('In order to use extendWith() utility function fnCustomizer should be provided!');
+		}
+
+		for (var sSourceProperty in mSource) {
+			if (mSource.hasOwnProperty(sSourceProperty)) {
+				if (fnCustomizer(
+						mDestination[sSourceProperty],
+						mSource[sSourceProperty],
+						sSourceProperty,
+						mDestination,
+						mSource)
+				){
+					mDestination[sSourceProperty] = mSource[sSourceProperty];
+				}
+			}
+		}
+	};
+
+	/**
+	 * Returns if the <code>oDomElement</code> is currently visible on the screen.
+	 *
+	 * @param {HTMLElement|jQuery} oDomElement Element to be evaluated
+	 * @return {boolean} - Returns if <code>oDomElement</code> is currently visible on the screen.
+	 */
+	Utils.isElementInViewport = function(oDomElement) {
+		if (oDomElement instanceof jQuery) {
+			oDomElement = oDomElement.get(0);
+		}
+
+		var mRect = oDomElement.getBoundingClientRect();
+
+		return (
+			mRect.top >= 0 &&
+			mRect.left >= 0 &&
+			mRect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+			mRect.right <= (window.innerWidth || document.documentElement.clientWidth)
+		);
+	};
+
+	/**
+	 * Shows a message box.
+	 * @param  {sap.m.MessageBox.Icon|string} oMessageType The type of the message box (icon to be displayed)
+	 * @param  {string} sTitleKey The text key for the title of the message box
+	 * @param  {string} sMessageKey The text key for the message of the message box
+	 * @param  {any} oError Optional - If an error is passed on, the message box text is derived from it
+	 * @return {Promise} Promise displaying the message box; resolves when it is closed
+	 * @private
+	 */
+	Utils._showMessageBox = function(oMessageType, sTitleKey, sMessageKey, oError) {
+		var oResourceBundle = sap.ui.getCore().getLibraryResourceBundle("sap.ui.rta");
+		var sMessage = oResourceBundle.getText(sMessageKey, oError ? [oError.message || oError] : undefined);
+		var sTitle = oResourceBundle.getText(sTitleKey);
+
+		return new Promise(function(resolve) {
+			MessageBox.show(sMessage, {
+				icon: oMessageType,
+				title: sTitle,
+				onClose: resolve,
+				styleClass: Utils.getRtaStyleClassName()
+			});
+		});
 	};
 
 	return Utils;

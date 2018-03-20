@@ -31,41 +31,63 @@
 						load="handleLandingImageLoad"
 						visible="{=!${device>/system/phone}}"/>
 
-					<Text
+					<l:VerticalLayout
 						id="landingImageHeadline"
+						class="sapUiDocumentationDocumentationHeading"
 						visible="false"
-						class="sapUiDocumentationDocumentationHeaderText sapUiDocumentationDocumentationHeaderTitleText"
-						text="Documentation"
-						width="100%"
-						textAlign="Left"/>
+						width="100%">
+						<Text
+							text="Documentation"
+							width="100%"
+							textAlign="Left"/>
+						<Button
+							class="actionButton"
+							text="Download"
+							type="Emphasized"
+							press="onDownloadButtonPress"/>
+					</l:VerticalLayout>
 				</l:BlockLayoutCell>
 			</l:BlockLayoutRow>
 
-			<l:BlockLayoutRow visible="{versionData>/isInternal}">
-				<l:BlockLayoutCell>
+			<l:BlockLayoutRow id="disclaimerBlock" visible="false">
+				<l:BlockLayoutCell
+						backgroundColorSet="ColorSet9"
+						backgroundColorShade="ShadeA">
 					<MessageStrip
-						showIcon="true"
-						text="This is the internal version of the documentation. It contains topics that are still under construction, as well as SAP-internal information that should not be passed on to anybody outside SAP."/>
+						id="disclaimerMessage"
+						showIcon="true"/>
 				</l:BlockLayoutCell>
 			</l:BlockLayoutRow>
 
 			<l:BlockLayoutRow class="sapUiContentPadding">
 				<l:BlockLayoutCell
-						class="largeCell demokitInitialPagesColorPatternB">
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
+					<l:VerticalLayout width="100%">
 					<custom:TitleLink
 							width="100%"
 							text="What's New?"
 							href="#/topic/99ac68a5b1c3416ab5c84c99fefa250d"
 							titleStyle="H1"/>
+						<Text
+								text="Find out about the new features in the latest UI5 versions"/>
+					</l:VerticalLayout>
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="largeCell demokitInitialPagesColorPatternC">
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB">
+					<l:VerticalLayout width="100%">
 					<custom:TitleLink
 							width="100%"
 							text="Read Me First"
 							href="#/topic/167193ced54c41c3961d7df3479d7bbe"
 							titleStyle="H1"/>
+						<Text
+								text="Important information before you start using UI5 productively"/>
+					</l:VerticalLayout>
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
@@ -106,7 +128,9 @@
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
 				<l:BlockLayoutCell
-						class="largeCell demokitInitialPagesColorPatternC">
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB">
 					<l:VerticalLayout width="100%">
 						<custom:TitleLink
 								width="100%"
@@ -119,11 +143,13 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="largeCell demokitInitialPagesColorPatternB">
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:VerticalLayout width="100%">
 						<custom:TitleLink
 								width="100%"
-								text="Developing Content"
+								text="Developing Controls"
 								href="#/topic/8dcab0011d274051808f959800cabf9f"
 								titleStyle="H1"/>
 						<Text
@@ -136,6 +162,8 @@
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
 						class="largeCell demokitInitialPagesColorPatternA"
+						backgroundColorSet="ColorSet9"
+						backgroundColorShade="ShadeA"
 						visible="{=!${versionData>/isOpenUI5}}">
 					<l:VerticalLayout width="100%">
 						<custom:TitleLink
@@ -150,6 +178,8 @@
 
 				<l:BlockLayoutCell
 						class="largeCell demokitInitialPagesColorPatternC"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB"
 						visible="{=!${versionData>/isOpenUI5}}">
 					<l:VerticalLayout width="100%">
 						<custom:TitleLink
@@ -179,7 +209,9 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="largeCell demokitInitialPagesColorPatternD">
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeC">
 					<l:VerticalLayout width="100%">
 						<custom:TitleLink
 								width="100%"
@@ -195,7 +227,6 @@
 			<l:BlockLayoutRow>
 				<core:Fragment id="footerFragment" fragmentName="sap.ui.documentation.sdk.view.Footer" type="XML" />
 			</l:BlockLayoutRow>
-
 		</l:BlockLayout>
 	</Page>
 </mvc:View>

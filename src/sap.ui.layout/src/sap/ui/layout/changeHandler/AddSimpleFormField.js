@@ -3,11 +3,9 @@
  */
 
 sap.ui.define([
-	"jquery.sap.global",
 	"sap/ui/fl/Utils",
-	"sap/ui/fl/changeHandler/Base",
 	"sap/ui/fl/changeHandler/ChangeHandlerMediator"
-], function(jQuery, Utils, Base, ChangeHandlerMediator) {
+], function(Utils, ChangeHandlerMediator) {
 	"use strict";
 
 	/**
@@ -129,7 +127,7 @@ sap.ui.define([
 
 			oModifier.removeAllAggregation(oSimpleForm, "content");
 			for (var i = 0; i < aContentClone.length; ++i) {
-				oModifier.insertAggregation(oSimpleForm, "content", aContentClone[i], i);
+				oModifier.insertAggregation(oSimpleForm, "content", aContentClone[i], i, mPropertyBag.view);
 			}
 
 			return true;

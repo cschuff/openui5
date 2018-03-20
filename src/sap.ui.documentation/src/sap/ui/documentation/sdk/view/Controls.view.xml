@@ -52,11 +52,16 @@
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
 						title="Featured Controls"
-						class="demokitInitialPagesColorPatternA sapUiDemokitLandingBlockHeadline"/>
+						class="sapUiDemokitLandingBlockHeadline"
+						backgroundColorSet="ColorSet9"
+						backgroundColorShade="ShadeA"/>
 			</l:BlockLayoutRow>
 
 			<l:BlockLayoutRow>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternB">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://edit"
@@ -65,13 +70,17 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Input"
 								filter="Input"
 								text="Input"
 								titleStyle="H2"/>
 						<Text text="User interaction"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternC">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://list"
@@ -80,13 +89,17 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/List"
 								filter="List"
 								text="Lists"
 								titleStyle="H2"/>
 						<Text text="Various list structures"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternD">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeC">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://table-view"
@@ -95,13 +108,17 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Table"
 								filter="Table"
 								text="Tables"
 								titleStyle="H2"/>
 						<Text text="Simple or more powerful tables"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternE">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://popup-window"
@@ -110,6 +127,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Popup"
 								filter="Popup"
 								text="Pop-Ups"
 								titleStyle="H2"/>
@@ -118,7 +136,10 @@
 				</l:BlockLayoutCell>
 			</l:BlockLayoutRow>
 			<l:BlockLayoutRow>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternC">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://grid"
@@ -127,6 +148,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Tile"
 								filter="Tile"
 								text="Tiles"
 								titleStyle="H2"/>
@@ -134,7 +156,10 @@
 								text="Tiles for e.g. texts, images or charts"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternD">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeD">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://message-popup"
@@ -143,13 +168,17 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Message"
 								filter="Message"
 								text="Messages"
 								titleStyle="H2"/>
 						<Text text="User notification"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternE">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://header"
@@ -158,13 +187,17 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Bar"
 								filter="Bar"
 								text="Bars"
 								titleStyle="H2"/>
 						<Text text="Toolbars and headers"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternB">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeC">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://tree"
@@ -173,6 +206,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Tree"
 								filter="Tree"
 								text="Trees"
 								titleStyle="H2"/>
@@ -181,7 +215,10 @@
 				</l:BlockLayoutCell>
 			</l:BlockLayoutRow>
 			<l:BlockLayoutRow visible="{= !${versionData>/isOpenUI5}}">
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternE">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeD">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://lightbulb"
@@ -190,13 +227,17 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Smart"
 								filter="Smart"
 								text="Smart Controls"
 								titleStyle="H2"/>
 						<Text text="Metadata-driven controls"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternB">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://map-2"
@@ -205,6 +246,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Map"
 								filter="Map"
 								text="Maps"
 								titleStyle="H2"/>
@@ -212,7 +254,10 @@
 								text="Location visualization"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternD">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeC">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://filter-analytics"
@@ -221,6 +266,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Chart"
 								filter="Chart"
 								text="Charts"
 								titleStyle="H2"/>
@@ -228,7 +274,10 @@
 								text="Data visualization"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternC">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeD">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://process"
@@ -237,6 +286,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Process"
 								filter="Process"
 								text="Processes"
 								titleStyle="H2"/>
@@ -248,11 +298,16 @@
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
 						title="Layout &amp; Pages"
-						class="demokitInitialPagesColorPatternA sapUiDemokitLandingBlockHeadline"/>
+						class="sapUiDemokitLandingBlockHeadline"
+						backgroundColorSet="ColorSet9"
+						backgroundColorShade="ShadeA"/>
 			</l:BlockLayoutRow>
 
 			<l:BlockLayoutRow>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternB">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://write-new"
@@ -261,6 +316,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Object Page"
 								filter="Object Page"
 								text="Object Page"
 								titleStyle="H2"/>
@@ -268,7 +324,10 @@
 								text="Displaying, creating, or editing objects"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternC">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://chart-table-view"
@@ -277,6 +336,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Dynamic Page"
 								filter="Dynamic Page"
 								text="Dynamic Page"
 								titleStyle="H2"/>
@@ -285,7 +345,10 @@
 								class="sapUiTinyMarginBottom"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternD">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeC">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://screen-split-three"
@@ -294,6 +357,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Flexible Column Layout"
 								filter="Flexible Column Layout"
 								text="Flexible Column Layout"
 								titleStyle="H2"/>
@@ -301,7 +365,10 @@
 								text="Page with up to 3 columns"/>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
-				<l:BlockLayoutCell class="largeCell demokitInitialPagesColorPatternE">
+				<l:BlockLayoutCell
+						class="largeCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeD">
 					<l:VerticalLayout>
 						<core:Icon
 								src="sap-icon://screen-split-one"
@@ -310,6 +377,7 @@
 								class="sapUiTinyMarginBottom"/>
 						<custom:TitleLink
 								press="onPress"
+								href="#controls/filter/Split App"
 								filter="Split App"
 								text="Split App"
 								titleStyle="H2"/>

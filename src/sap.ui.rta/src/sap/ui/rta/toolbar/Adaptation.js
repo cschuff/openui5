@@ -7,6 +7,9 @@ sap.ui.define([
 	'sap/m/Button',
 	'sap/m/SegmentedButton',
 	'sap/m/SegmentedButtonItem',
+	'sap/m/MenuButton',
+	'sap/m/MenuItem',
+	'sap/m/Menu',
 	'./Base'
 ],
 function(
@@ -14,6 +17,9 @@ function(
 	Button,
 	SegmentedButton,
 	SegmentedButtonItem,
+	MenuButton,
+	MenuItem,
+	Menu,
 	Base
 ) {
 	"use strict";
@@ -48,7 +54,9 @@ function(
 				"restore": {},
 				"transport": {},
 				"modeChange": {},
-				"manageApps": {}
+				"manageApps": {},
+				"appVariantOverview": {},
+				"saveAs": {}
 			},
 			properties: {
 				/** Determines whether publish button is visible */
@@ -61,12 +69,6 @@ function(
 				"modeSwitcher": {
 					type: "string",
 					defaultValue: "adaptation"
-				},
-
-				/** Determines whether Message information icon button is visible */
-				"manageAppsVisible": {
-					"type": "boolean",
-					"defaultValue": false
 				}
 			}
 		}
@@ -139,10 +141,29 @@ function(
 			new Button({
 				type:"Transparent",
 				icon: "sap-icon://message-information",
-				visible: this.getManageAppsVisible(),
+				enabled: false,
+				visible: false,
 				tooltip: this.getTextResources().getText("BTN_MANAGE_APPS"),
 				press: this.eventHandler.bind(this, 'ManageApps')
 			}).data('name', 'manageApps'),
+			new MenuButton({
+				type:"Transparent",
+				icon: "sap-icon://message-information",
+				enabled: false,
+				visible: false,
+				tooltip: this.getTextResources().getText("BTN_MANAGE_APPS"),
+				menu: new Menu({
+					itemSelected: this.eventHandler.bind(this, 'AppVariantOverview'),
+					items: [
+						new MenuItem('keyUser', {
+							text: this.getTextResources().getText("MENU_ITEM_KEY_USER")
+						}),
+						new MenuItem('developer', {
+							text: this.getTextResources().getText("MENU_ITEM_SAP_DEVELOPER")
+						})
+					]
+				})
+			}).data('name', 'appVariantOverview'),
 			new Button({
 				type: "Transparent",
 				text: this.getTextResources().getText("BTN_RESTORE"),
@@ -151,7 +172,7 @@ function(
 				tooltip: this.getTextResources().getText("BTN_RESTORE"),
 				press: this.eventHandler.bind(this, 'Restore')
 			}).data('name', 'restore'),
-			new sap.m.Button({
+			new Button({
 				type: "Transparent",
 				enabled: false,
 				visible: this.getPublishVisible(),
@@ -159,6 +180,14 @@ function(
 				tooltip: this.getTextResources().getText("BTN_PUBLISH"),
 				press: this.eventHandler.bind(this, 'Transport') // Fixme: rename event
 			}).data('name', 'publish'),
+			new Button({
+				type: "Transparent",
+				text: this.getTextResources().getText("BTN_SAVE_AS"),
+				enabled: false,
+				visible: false,
+				tooltip: this.getTextResources().getText("TOOLTIP_SAVE_AS"),
+				press: this.eventHandler.bind(this, 'SaveAs')
+			}).data('name', 'saveAs'),
 			new Button({
 				type:"Transparent",
 				text: this.getTextResources().getText("BTN_EXIT"),
@@ -184,7 +213,6 @@ function(
 	/* Methods propagation */
 	Adaptation.prototype.show = function () { return Base.prototype.show.apply(this, arguments); };
 	Adaptation.prototype.hide = function () { return Base.prototype.hide.apply(this, arguments); };
-
 
 	return Adaptation;
 

@@ -3,8 +3,8 @@
  */
 
 // Provides the base implementation for all model implementations
-sap.ui.define(['./FormatException', './ParseException', './SimpleType', './ValidateException'],
-	function(FormatException, ParseException, SimpleType, ValidateException) {
+sap.ui.define(['./SimpleType'],
+	function(SimpleType) {
 	"use strict";
 
 	/**
@@ -25,7 +25,6 @@ sap.ui.define(['./FormatException', './ParseException', './SimpleType', './Valid
 	 * @author SAP SE
 	 * @version ${version}
 	 *
-	 * @constructor
 	 * @param {object} [oFormatOptions] options as provided by concrete subclasses
 	 * @param {object} [oConstraints] constraints as supported by concrete subclasses
 	 * @public

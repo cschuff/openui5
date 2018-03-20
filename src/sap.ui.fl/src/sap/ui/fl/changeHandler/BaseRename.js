@@ -3,9 +3,9 @@
  */
 
 sap.ui.define([
-	"jquery.sap.global", "./Base", "sap/ui/fl/Utils"
+	"sap/ui/fl/changeHandler/Base",
+	"sap/ui/fl/Utils"
 ], function(
-	jQuery,
 	Base,
 	Utils
 ) {
@@ -115,11 +115,9 @@ sap.ui.define([
 						throw new Error("oSpecificChangeInfo.value attribute required");
 					}
 				}
-
 			};
 		}
 	};
-
 	return BaseRename;
 },
 /* bExport= */true);

@@ -40,14 +40,31 @@ sap.ui.define([ 'sap/ui/rta/command/BaseCommand',
 	/**
 	 * Execute this composite command
 	 *
-	 * @returns {promise} empty promise
+	 * @returns {Promise} empty resolved promise or rejected promise
 	 */
 	CompositeCommand.prototype.execute = function() {
 		var aPromises = [];
 		this._forEachCommand(function(oCommand){
 			aPromises.push(oCommand.execute.bind(oCommand));
 		});
-		return flUtils.execPromiseQueueSequentially(aPromises);
+		return flUtils.execPromiseQueueSequentially(aPromises, true)
+
+		.catch(function(e) {
+			var aCommands = this.getCommands();
+			aCommands.forEach(function(oCommand) {
+				if (oCommand instanceof sap.ui.rta.command.FlexCommand) {
+					if (!oCommand._aRecordedUndo) {
+						this.removeCommand(oCommand);
+					}
+				}
+			}.bind(this));
+
+			return this.undo()
+
+			.then(function() {
+				return Promise.reject(e);
+			});
+		}.bind(this));
 	};
 
 	CompositeCommand.prototype.undo = function() {

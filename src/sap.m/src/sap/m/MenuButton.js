@@ -3,9 +3,37 @@
  */
 
 // Provides control sap.m.MenuButton.
-sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Button', './SplitButton', './Dialog', 'sap/ui/Device', 'sap/ui/core/EnabledPropagator'],
-	function(jQuery, library, Control, Button, SplitButton, Dialog, Device, EnabledPropagator) {
+sap.ui.define([
+	'jquery.sap.global',
+	'./library',
+	'sap/ui/core/Control',
+	'./Button',
+	'./SplitButton',
+	'sap/ui/Device',
+	'sap/ui/core/EnabledPropagator',
+	'sap/ui/core/library',
+	"./MenuButtonRenderer"
+], function(
+	jQuery,
+	library,
+	Control,
+	Button,
+	SplitButton,
+	Device,
+	EnabledPropagator,
+	coreLibrary,
+	MenuButtonRenderer
+	) {
 		"use strict";
+
+		// shortcut for sap.m.MenuButtonMode
+		var MenuButtonMode = library.MenuButtonMode;
+
+		// shortcut for sap.ui.core.TextDirection
+		var TextDirection = coreLibrary.TextDirection;
+
+		// shortcut for sap.m.ButtonType
+		var ButtonType = library.ButtonType;
 
 		/**
 		 * Constructor for a new MenuButton.
@@ -23,6 +51,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		 * @constructor
 		 * @public
 		 * @alias sap.m.MenuButton
+		 * @see {@link fiori:https://experience.sap.com/fiori-design-web/menu-button/ Menu Button}
 		 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 		 */
 		var MenuButton = Control.extend("sap.m.MenuButton", /** @lends sap.m.MenuButton.prototype */ { metadata : {
@@ -39,7 +68,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 				/**
 				 * Defines the type of the <code>MenuButton</code> (for example, Default, Accept, Reject, Back, etc.)
 				 */
-				type : {type : "sap.m.ButtonType", group : "Appearance", defaultValue : sap.m.ButtonType.Default},
+				type : {type : "sap.m.ButtonType", group : "Appearance", defaultValue : ButtonType.Default},
 
 				/**
 				 * Defines the width of the <code>MenuButton</code>.
@@ -78,12 +107,12 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 				 * Specifies the element's text directionality with enumerated options.
 				 * By default, the control inherits text direction from the DOM.
 				 */
-				textDirection : {type : "sap.ui.core.TextDirection", group : "Appearance", defaultValue : sap.ui.core.TextDirection.Inherit},
+				textDirection : {type : "sap.ui.core.TextDirection", group : "Appearance", defaultValue : TextDirection.Inherit},
 
 				/**
 				 * Defines whether the <code>MenuButton</code> is set to <code>Regular</code> or <code>Split</code> mode.
 				 */
-				buttonMode : { type : "sap.m.MenuButtonMode", group : "Misc", defaultValue : sap.m.MenuButtonMode.Regular },
+				buttonMode : { type : "sap.m.MenuButtonMode", group : "Misc", defaultValue : MenuButtonMode.Regular },
 
 				/**
 				 * Controls whether the default action handler is invoked always or it is invoked only until a menu item is selected.
@@ -111,7 +140,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 				defaultAction: {}
 			},
 			defaultAggregation : "menu",
-			designTime: true
+			designtime: "sap/m/designtime/MenuButton.designtime"
 		}});
 
 		EnabledPropagator.call(MenuButton.prototype);
@@ -370,7 +399,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		};
 
 		MenuButton.prototype._isSplitButton = function() {
-			return this.getButtonMode() === sap.m.MenuButtonMode.Split;
+			return this.getButtonMode() === MenuButtonMode.Split;
 		};
 
 		/**
@@ -384,7 +413,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		MenuButton.prototype.setProperty = function(sPropertyName, vValue, bSuppressInvalidate) {
 			// Several button type property values are not allowed
 			function isForbiddenType(sType) {
-				var aTypes = [sap.m.ButtonType.Up, sap.m.ButtonType.Back, sap.m.ButtonType.Unstyled];
+				var aTypes = [ButtonType.Up, ButtonType.Back, ButtonType.Unstyled];
 				return aTypes.indexOf(sType) !== -1;
 			}
 
@@ -420,7 +449,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 			return Control.prototype.setTooltip.apply(this, arguments);
 		};
 
-		/**
+		/*
 		 * Override setter because the parent control has placed custom logic in it and all changes need to be propagated
 		 * to the internal button aggregation.
 		 * @param {string} sValue The text of the sap.m.MenuButton
@@ -432,7 +461,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 			return this;
 		};
 
-		/**
+		/*
 		 * Override setter because the parent control has placed custom logic in it and all changes need to be propagated
 		 * to the internal button aggregation.
 		 * @param {string} sValue`
@@ -444,7 +473,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 			return this;
 		};
 
-		/**
+		/*
 		 * Override setter because the parent control has placed custom logic in it and all changes need to be propagated
 		 * to the internal button aggregation.
 		 * @param {string} vValue
@@ -495,5 +524,4 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control', './Butto
 		};
 
 		return MenuButton;
-
-	}, /* bExport= */ true);
+	});

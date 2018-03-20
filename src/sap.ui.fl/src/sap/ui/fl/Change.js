@@ -38,7 +38,6 @@ sap.ui.define([
 			}
 
 			this._oDefinition = oFile;
-			this._oOriginDefinition = jQuery.extend(true, {}, oFile);
 			this._sRequest = '';
 			this._bUserDependent = (oFile.layer === "USER");
 			this._vRevertData = null;
@@ -60,10 +59,6 @@ sap.ui.define([
 		DIRTY: "UPDATE"
 	};
 
-	Change.events = {
-		markForDeletion: "markForDeletion"
-	};
-
 	Change.prototype.setState = function(sState) {
 		if (this._isValidState(sState)) {
 			this.setProperty("state", sState);
@@ -73,8 +68,8 @@ sap.ui.define([
 
 	/**
 	 * Validates if the new state of change has a valid value
-	 * The new state value has to be in the <code>Change.states<code> list
-	 * Moving of state directly from <code>Change.states.NEW<code> to <code>Change.states.DIRTY<code> is not allowed.
+	 * The new state value has to be in the <code>Change.states</code> list
+	 * Moving of state directly from <code>Change.states.NEW</code> to <code>Change.states.DIRTY</code> is not allowed.
 	 * @param {string} sState - value of target state
 	 * @returns {boolean} - new state is valid
 	 * @private
@@ -152,6 +147,18 @@ sap.ui.define([
 	};
 
 	/**
+	 * Returns the file type
+	 *
+	 * @returns {String} fileType of the file
+	 * @public
+	 */
+	Change.prototype.getFileType = function () {
+		if (this._oDefinition) {
+			return this._oDefinition.fileType;
+		}
+	};
+
+	/**
 	 * Returns the original language in ISO 639-1 format
 	 *
 	 * @returns {String} Original language
@@ -202,6 +209,17 @@ sap.ui.define([
 	 */
 	Change.prototype.getNamespace = function () {
 		return this._oDefinition.namespace;
+	};
+
+	/**
+	 * Sets the namespace.
+	 *
+	 * @param {string} sNamespace Namespace of the change document
+	 *
+	 * @public
+	 */
+	Change.prototype.setNamespace = function (sNamespace) {
+		this._oDefinition.namespace = sNamespace;
 	};
 
 	/**
@@ -459,6 +477,17 @@ sap.ui.define([
 	};
 
 	/**
+	 * Sets the component.
+	 *
+	 * @param {string} sComponent ID of the app or app variant
+	 *
+	 * @public
+	 */
+	Change.prototype.setComponent = function (sComponent) {
+		this._oDefinition.reference = sComponent;
+	};
+
+	/**
 	 * Gets the creation timestamp
 	 *
 	 * @returns {String} creation timestamp
@@ -509,7 +538,6 @@ sap.ui.define([
 		var sResponse = JSON.stringify(oResponse);
 		if (sResponse) {
 			this._oDefinition = JSON.parse(sResponse);
-			this._oOriginDefinition = JSON.parse(sResponse);
 			this.setState(Change.states.PERSISTED);
 		}
 	};
@@ -615,7 +643,7 @@ sap.ui.define([
 	};
 
 	/**
-	 * Returns all dependent global IDs, including the ID from selector of the changes.
+	 * Returns all dependent global IDs, including the ID from the selector of the change.
 	 *
 	 * @param {sap.ui.core.Component} oAppComponent - Application component, needed to translate the local ID into a global ID
 	 *
@@ -641,7 +669,7 @@ sap.ui.define([
 				if (oDependentSelector.idIsLocal) {
 					sId = oAppComponent.createId(oDependentSelector.id);
 				}
-				if (aDependentIds.indexOf(sId) === -1) {
+				if (sId && aDependentIds.indexOf(sId) === -1) {
 					aDependentIds.push(sId);
 				}
 			});
@@ -653,13 +681,31 @@ sap.ui.define([
 	};
 
 	/**
-	 * Returns the change key
+	 * Returns list of IDs of controls which the change depends on, excluding the ID from the selector of the change.
 	 *
-	 * @returns {String} Change key of the file which is a unique concatenation of fileName, layer and namespace
+	 * @param {sap.ui.core.Component} oAppComponent - Application component, needed to create a global ID from the local ID
+	 *
+	 * @returns {array} List of control IDs which the change depends on
+	 *
 	 * @public
 	 */
-	Change.prototype.getKey = function () {
-		return this._oDefinition.fileName + this._oDefinition.layer + this._oDefinition.namespace;
+	Change.prototype.getDependentControlIdList = function (oAppComponent) {
+		var sId;
+		var aDependentIds = this.getDependentIdList().concat();
+
+		if (aDependentIds.length > 0) {
+			var oSelector = this.getSelector();
+			sId = oSelector.id;
+			if (oSelector.idIsLocal) {
+				sId = oAppComponent.createId(oSelector.id);
+			}
+			var iIndex = aDependentIds.indexOf(sId);
+			if (iIndex > -1) {
+				aDependentIds.splice(iIndex, 1);
+			}
+		}
+
+		return aDependentIds;
 	};
 
 	/**
@@ -710,6 +756,7 @@ sap.ui.define([
 	 * @param {Object}  [oPropertyBag.validAppVersions] Application versions where the change is active
 	 * @param {String}  [oPropertyBag.reference] Application component name
 	 * @param {String}  [oPropertyBag.namespace] The namespace of the change file
+	 * @param {String}  [oPropertyBag.generator] The tool which is used to generate the change file
 	 *
 	 * @returns {Object} The content of the change file
 	 *
@@ -721,13 +768,21 @@ sap.ui.define([
 			oPropertyBag = {};
 		}
 
+		var sFileType;
+		if (oPropertyBag.fileType) {
+			sFileType = oPropertyBag.fileType;
+		} else {
+			sFileType = oPropertyBag.isVariant ? "variant" : "change";
+		}
+
 		var oNewFile = {
 			fileName: oPropertyBag.id || Utils.createDefaultFileName(oPropertyBag.changeType),
-			fileType: (oPropertyBag.isVariant) ? "variant" : "change",
+			fileType: sFileType,
 			changeType: oPropertyBag.changeType || "",
 			reference: oPropertyBag.reference || "",
 			packageName: oPropertyBag.packageName || "",
 			content: oPropertyBag.content || {},
+			// TODO: Is an empty selector allowed?
 			selector: oPropertyBag.selector || {},
 			layer: oPropertyBag.layer || Utils.getCurrentLayer(oPropertyBag.isUserDependent),
 			texts: oPropertyBag.texts || {},
@@ -737,7 +792,7 @@ sap.ui.define([
 			conditions: {},
 			context: oPropertyBag.context || "",
 			support: {
-				generator: "Change.createInitialFileContent",
+				generator: oPropertyBag.generator || "Change.createInitialFileContent",
 				service: oPropertyBag.service || "",
 				user: "",
 				sapui5Version: sap.ui.version

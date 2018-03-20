@@ -3,10 +3,39 @@
  */
 
 // Provides control sap.m.DatePicker.
-sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeField', 'sap/ui/model/type/Date', 'sap/ui/model/odata/type/ODataType', 'sap/ui/core/date/UniversalDate', './library'],
-	function(jQuery, Device, InputBase, DateTimeField, Date1, ODataType, UniversalDate, library) {
+sap.ui.define([
+	'jquery.sap.global',
+	'sap/ui/Device',
+	'./InputBase',
+	'./DateTimeField',
+	'sap/ui/core/date/UniversalDate',
+	'./library',
+	'sap/ui/core/Control',
+	'sap/ui/core/library',
+	"./DatePickerRenderer"
+],
+	function(
+	jQuery,
+	Device,
+	InputBase,
+	DateTimeField,
+	UniversalDate,
+	library,
+	Control,
+	coreLibrary,
+	DatePickerRenderer
+	) {
 	"use strict";
 
+
+	// shortcut for sap.ui.core.TextAlign
+	var TextAlign = coreLibrary.TextAlign;
+
+	// shortcut for sap.ui.core.CalendarType
+	var CalendarType = coreLibrary.CalendarType;
+
+	// lazy dependency to sap/ui/unified/Calendar
+	var Calendar;
 
 	/**
 	 * Constructor for a new <code>DatePicker</code>.
@@ -88,6 +117,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 	 * @public
 	 * @since 1.22.0
 	 * @alias sap.m.DatePicker
+	 * @see {@link fiori:https://experience.sap.com/fiori-design-web/date-picker/ Date Picker}
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	var DatePicker = DateTimeField.extend("sap.m.DatePicker", /** @lends sap.m.DatePicker.prototype */ { metadata : {
@@ -174,7 +204,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 				}
 			}
 		},
-		designTime : true
+		designtime: "sap/m/designtime/DatePicker.designtime"
 	}});
 
 
@@ -225,14 +255,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 		this._bIntervalSelection = false;
 		this._bOnlyCalendar = true;
-		//We need to know is the current instance subclass of the DatePicker(DateTimePicker) or not.
-		this._bDatePickerInstance = this.getMetadata().getName() === "sap.m.DatePicker";
 
 		this._bValid = true;
 
-		this._oMinDate = new Date(1, 0, 1);
+		this._oMinDate = new Date(1, 0, 1); // set the date to minimum possible for that day
 		this._oMinDate.setFullYear(1); // otherwise year 1 will be converted to year 1901
-		this._oMaxDate = this._bDatePickerInstance ? new Date(9999, 11, 31) : new Date(9999, 11, 31, 23, 59, 59, 99);
+		this._oMaxDate = new Date(9999, 11, 31, 23, 59, 59, 999); // set the date for the maximum possible for that day
 
 	};
 
@@ -262,15 +290,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 		this._sUsedValuePattern = undefined;
 		this._sUsedValueCalendarType = undefined;
 		this._oValueFormat = undefined;
-		this._bDatePickerInstance = undefined;
-
 	};
 
 	DatePicker.prototype.invalidate = function(oOrigin) {
 
 		if (!oOrigin || oOrigin != this._oCalendar) {
 			// Calendar is only invalidated by DatePicker itself -> so don't invalidate DatePicker
-			sap.ui.core.Control.prototype.invalidate.apply(this, arguments);
+			Control.prototype.invalidate.apply(this, arguments);
 			// Invalidate calendar with a delayed call so it could have updated specialDates aggregation from DatePicker
 			this._iInvalidateCalendar = jQuery.sap.delayedCall(0, this, _invalidateCalendar);
 		}
@@ -438,23 +464,21 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 
 	DatePicker.prototype._dateValidation = function (oDate) {
+		this._bValid = true;
+
 		if (oDate && (oDate.getTime() < this._oMinDate.getTime() || oDate.getTime() > this._oMaxDate.getTime())) {
 			this._bValid = false;
 			jQuery.sap.assert(this._bValid, "Date must be in valid range");
-			this._oWantedDate = oDate;
-			oDate = undefined; // don't use wrong date to determine sValue
-		}else {
-			this._bValid = true;
-			this.setProperty("dateValue", oDate, true); // no rerendering
-			this._oWantedDate = undefined;
 		}
+
+		this.setProperty("dateValue", oDate);
 
 		return oDate;
 	};
 
 	DatePicker.prototype.setMinDate = function(oDate) {
 
-		if (oDate && !(oDate instanceof Date)) {
+		if (this._isValidDate(oDate)) {
 			throw new Error("Date must be a JavaScript date object; " + this);
 		}
 
@@ -471,8 +495,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 			this._oMinDate = new Date(oDate.getTime());
 			var oDateValue = this.getDateValue();
 			if (oDateValue && oDateValue.getTime() < oDate.getTime()) {
-				jQuery.sap.log.warning("DateValue not in valid date -> changed to minDate", this);
-				this.setDateValue(new Date(oDate.getTime()));
+				jQuery.sap.log.warning("DateValue not in valid date range", this);
 			}
 		} else {
 			this._oMinDate = new Date(1, 0, 1);
@@ -480,15 +503,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 		}
 
 		// re-render because order of parameter changes not clear -> check onBeforeRendering
-		this.setProperty("minDate", oDate, false);
+		this.setProperty("minDate", oDate);
 
 		if (this._oCalendar) {
 			this._oCalendar.setMinDate(oDate);
 		}
 
-		if (this._bDatePickerInstance) {
-			this._oMinDate.setHours(0, 0, 0, 0);//clear the time part
-		}
+		this._oMinDate.setHours(0, 0, 0, 0);//clear the time part
 
 		return this;
 
@@ -496,7 +517,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 	DatePicker.prototype.setMaxDate = function(oDate) {
 
-		if (oDate && !(oDate instanceof Date)) {
+		if (this._isValidDate(oDate)) {
 			throw new Error("Date must be a JavaScript date object; " + this);
 		}
 
@@ -513,29 +534,26 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 			this._oMaxDate = new Date(oDate.getTime());
 			var oDateValue = this.getDateValue();
 			if (oDateValue && oDateValue.getTime() > oDate.getTime()) {
-				jQuery.sap.log.warning("DateValue not in valid date -> changed to maxDate", this);
-				this.setDateValue(new Date(oDate.getTime()));
+				jQuery.sap.log.warning("DateValue not in valid date", this);
 			}
 		} else {
-			this._oMaxDate = new Date(9999, 11, 31, 23, 59, 59, 99);
+			this._oMaxDate = new Date(9999, 11, 31, 23, 59, 59, 999);
 		}
 
 		// re-render because order of parameter changes not clear -> check onBeforeRendering
-		this.setProperty("maxDate", oDate, false);
+		this.setProperty("maxDate", oDate);
 
 		if (this._oCalendar) {
 			this._oCalendar.setMaxDate(oDate);
 		}
 
-		if (this._bDatePickerInstance) {
-			this._oMaxDate.setHours(0, 0, 0, 0);//clear the time part
-		}
+		this._oMaxDate.setHours(23, 59, 59, 999);//set to max possible hours for this day
 
 		return this;
 
 	};
 
-	DatePicker.prototype._checkMinMaxDate = function() {
+	DatePicker.prototype._checkMinMaxDate = function () {
 
 		if (this._oMinDate.getTime() > this._oMaxDate.getTime()) {
 			jQuery.sap.log.warning("minDate > MaxDate -> dates switched", this);
@@ -551,9 +569,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 			}
 		}
 
-		// check if wanted date now in range
-		if (this._oWantedDate && this._oWantedDate.getTime() >= this._oMinDate.getTime() && this._oWantedDate.getTime() <= this._oMaxDate.getTime()) {
-			this.setDateValue(this._oWantedDate);
+		var oDateValue = this.getDateValue();
+
+		if (oDateValue &&
+			(oDateValue.getTime() < this._oMinDate.getTime() || oDateValue.getTime() > this._oMaxDate.getTime())) {
+			jQuery.sap.log.error("dateValue " + oDateValue.toString() + "(value=" + this.getValue() + ") does not match " +
+				"min/max date range(" + this._oMinDate.toString() + " - " + this._oMaxDate.toString() + "). App. " +
+				"developers should take care to maintain dateValue/value accordingly.", this);
 		}
 	};
 
@@ -563,14 +585,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 	};
 
 	DatePicker.prototype._handleDateValidation = function (oDate) {
+		this._bValid = true;
 
 		if (!oDate || oDate.getTime() < this._oMinDate.getTime() || oDate.getTime() > this._oMaxDate.getTime()) {
 			this._bValid = false;
 			jQuery.sap.log.warning("Value can not be converted to a valid date", this);
-		}else {
-			this._bValid = true;
-			this.setProperty("dateValue", oDate, true); // no rerendering
 		}
+
+		this.setProperty("dateValue", oDate);
 	};
 
 
@@ -578,7 +600,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 		if (sDisplayFormatType) {
 			var bFound = false;
-			for ( var sType in sap.ui.core.CalendarType) {
+			for ( var sType in CalendarType) {
 				if (sType == sDisplayFormatType) {
 					bFound = true;
 					break;
@@ -707,12 +729,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 		var sId = this.getLegend();
 		if (sId) {
-			if (!sap.ui.unified.CalendarLegend) {
-				sap.ui.getCore().loadLibrary("sap.ui.unified");
-				jQuery.sap.require("sap.ui.unified.library");
-			}
+			var CalendarLegend = sap.ui.require("sap/ui/unified/CalendarLegend");
 			oLegend = sap.ui.getCore().byId(sId);
-			if (oLegend && !(oLegend instanceof sap.ui.unified.CalendarLegend)) {
+			if (oLegend && !(typeof CalendarLegend == "function" && oLegend instanceof CalendarLegend)) {
 				throw new Error(oLegend + " is not an sap.ui.unified.CalendarLegend. " + this);
 			}
 		}
@@ -743,7 +762,6 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 		}
 
 		var oDate;
-		this._oWantedDate = undefined;
 		this._bValid = true;
 		if (sValue != "") {
 			oDate = this._parseValue(sValue, true);
@@ -761,7 +779,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 			this._curpos = this._$input.cursorPos();
 		}
 
-		if (oDate) {
+		if (oDate) {//user input is parsed successfully and the date fits to the min/max range
 			// get the value in valueFormat
 			sValue = this._formatValue(oDate, true);
 		}
@@ -833,7 +851,27 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 		return this;
 	};
 
+	DatePicker.prototype._storeInputSelection = function (oInput) {
+		if (Device.browser.msie || Device.browser.edge) {
+			//For IE & Edge, any selection of the underlying input must be removed before opening the picker popup,
+			//otherwise the input will receive focus via TAB during the picker is opened. The selection is restored back
+			//when the popup is closed
+			this._oInputSelBeforePopupOpen = {
+				iStart: oInput.selectionStart,
+				iEnd: oInput.selectionEnd
+			};
+			oInput.selectionStart = 0;
+			oInput.selectionEnd = 0;
+		}
+	};
 
+	DatePicker.prototype._restoreInputSelection = function (oInput) {
+		if (Device.browser.msie || Device.browser.edge) {
+			//The selection is restored back due to issue with IE & Edge. See _handleBeforeOpen
+			oInput.selectionStart = this._oInputSelBeforePopupOpen.iStart;
+			oInput.selectionEnd = this._oInputSelBeforePopupOpen.iEnd;
+		}
+	};
 
 
 	function _open(){
@@ -902,7 +940,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 		var eDock = sap.ui.core.Popup.Dock;
 		var sAt;
-		if (this.getTextAlign() == sap.ui.core.TextAlign.End) {
+		if (this.getTextAlign() == TextAlign.End) {
 			sAt = eDock.EndBottom + "-4"; // as m.Input has some padding around
 			this._oPopup.open(0, eDock.EndTop, sAt, this, null, "fit", true);
 		}else {
@@ -932,9 +970,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 	DatePicker.prototype._createPopupContent = function(){
 
 		if (!this._oCalendar) {
-			sap.ui.getCore().loadLibrary("sap.ui.unified");
-			jQuery.sap.require("sap.ui.unified.library");
-			this._oCalendar = new sap.ui.unified.Calendar(this.getId() + "-cal", {
+			if ( !Calendar ) {
+				sap.ui.getCore().loadLibrary("sap.ui.unified");
+				Calendar = sap.ui.requireSync("sap/ui/unified/Calendar");
+			}
+			this._oCalendar = new Calendar(this.getId() + "-cal", {
 				intervalSelection: this._bIntervalSelection,
 				minDate: this.getMinDate(),
 				maxDate: this.getMaxDate(),
@@ -969,13 +1009,17 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 		var oDate = this.getDateValue();
 
-		if (oDate) {
+		if (oDate &&
+			oDate.getTime() >= this._oMinDate.getTime() &&
+			oDate.getTime() <= this._oMaxDate.getTime()) {
+
 			this._oCalendar.focusDate(new Date(oDate.getTime()));
 			if (!this._oDateRange.getStartDate() || this._oDateRange.getStartDate().getTime() != oDate.getTime()) {
 				this._oDateRange.setStartDate(new Date(oDate.getTime()));
 			}
 		} else {
-			var oFocusDate = new Date();
+			var oInitialFocusedDateValue = this.getInitialFocusedDateValue();
+			var oFocusDate = oInitialFocusedDateValue ? oInitialFocusedDateValue : new Date();
 			var iMaxTimeMillis = this._oMaxDate.getTime() + 86400000 /* one day in milliseconds */;
 
 			if (oFocusDate.getTime() < this._oMinDate.getTime() || oFocusDate.getTime() > iMaxTimeMillis) {
@@ -1050,6 +1094,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 				this.setProperty("value", sValue, true); // no rerendering
 				this.fireChangeEvent(sValue, {valid: true});
 			}
+		} else if ((Device.system.desktop || !Device.support.touch) && !jQuery.sap.simulateMobileOnDesktop) {
+			this.focus();
 		}
 
 		// close popup and focus input after change event to allow application to reset value state or similar things
@@ -1152,6 +1198,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 	}
 
 	function _handleOpened(oEvent) {
+		this._storeInputSelection(this._$input.get(0));
 
 		this._renderedDays = this._oCalendar.$("-Month0-days").find(".sapUiCalItem").length;
 
@@ -1162,6 +1209,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 	function _handleClosed(oEvent) {
 		this.$("inner").attr("aria-expanded", false);
+
+		this._restoreInputSelection(this._$input.get(0));
 	}
 
 	function _resizeCalendar(oEvent){
@@ -1180,12 +1229,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 	function _checkSpecialDate(oSpecialDate) {
 
-		if (!sap.ui.unified.DateTypeRange) {
-			sap.ui.getCore().loadLibrary("sap.ui.unified");
-			jQuery.sap.require("sap.ui.unified.library");
-		}
+		var DateTypeRange = sap.ui.require("sap/ui/unified/DateTypeRange");
 
-		if (oSpecialDate && !(oSpecialDate instanceof sap.ui.unified.DateTypeRange)) {
+		if (oSpecialDate && !(DateTypeRange && oSpecialDate instanceof DateTypeRange)) {
 			throw new Error(oSpecialDate + "is not valid for aggregation \"specialDates\" of " + this);
 		}
 
@@ -1202,7 +1248,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 	}
 
 	/**
-	 * This event gets fired when the input operation has finished and the value has changed.
+	 * Fired when the input operation has finished and the value has changed.
+	 *
+	 * <b>Note:</b> Fired only when a new date is selected. If you change the month or year from the picker but not
+	 * select a new date from the newly selected month/year, the value of the <code>sap.m.DatePicker</code> won't be
+	 * updated and no change event will be fired.
 	 *
 	 * @name sap.m.DatePicker#change
 	 * @event
@@ -1214,7 +1264,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 	 * @public
 	 */
 
-	 /**
+	/**
 	 * Fire event change to attached listeners.
 	 *
 	 * Expects following event parameters:
@@ -1232,4 +1282,4 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device', './InputBase', './DateTimeF
 
 	return DatePicker;
 
-}, /* bExport= */ true);
+});

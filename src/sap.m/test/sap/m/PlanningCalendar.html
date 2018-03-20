@@ -10,6 +10,7 @@
 		<script src="shared-config.js"></script>
 		<script src="../../../resources/sap-ui-core.js"
 			id="sap-ui-bootstrap"
+			data-sap-ui-language="en_US"
 			data-sap-ui-libs="sap.m, sap.ui.unified">
 		</script>
 
@@ -20,57 +21,57 @@
 						items: [
 							new sap.ui.unified.CalendarLegendItem("T1", {
 								type: sap.ui.unified.CalendarDayType.Type01,
-								text: "Typ 1 in Calendar section"
+								text: "Type 1 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T2", {
 								type: sap.ui.unified.CalendarDayType.Type02,
-								text: "Typ 2 in Calendar section"
+								text: "Type 2 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T3", {
 								type: sap.ui.unified.CalendarDayType.Type03,
-								text: "Typ 3 in Calendar section"
+								text: "Type 3 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T4", {
 								type: sap.ui.unified.CalendarDayType.Type04,
-								text: "Typ 4 in Calendar section"
+								text: "Type 4 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T5", {
 								type: sap.ui.unified.CalendarDayType.Type05,
-								text: "Typ 5 in Calendar section"
+								text: "Type 5 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T6", {
 								type: sap.ui.unified.CalendarDayType.Type06,
-								text: "Typ 6 in Calendar section"
+								text: "Type 6 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T7", {
 								type: sap.ui.unified.CalendarDayType.Type07,
-								text: "Typ 7 in Calendar section"
+								text: "Type 7 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T8", {
 								type: sap.ui.unified.CalendarDayType.Type08,
-								text: "Typ 8 in Calendar section"
+								text: "Type 8 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T9", {
 								type: sap.ui.unified.CalendarDayType.Type09,
-								text: "Typ 9 in Calendar section"
+								text: "Type 9 in Legend Calendar area"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T10", {
 								type: sap.ui.unified.CalendarDayType.Type10,
-								text: "Typ 10 in Calendar section"
+								text: "Type 10 in Legend Calendar area"
 							}),
 						],
 						appointmentItems: [
 							new sap.ui.unified.CalendarLegendItem("T31", {
 								type: sap.ui.unified.CalendarDayType.Type01,
-								text: "Typ 1: in appointments section"
+								text: "Type Private Appointment"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T32", {
 								type: sap.ui.unified.CalendarDayType.Type02,
-								text: "Typ 2: in appointments section"
+								text: "Type Face2Face Appointment"
 							}),
 							new sap.ui.unified.CalendarLegendItem("T33", {
 								type: sap.ui.unified.CalendarDayType.Type12,
-								text: "Typ 12: in appointments section"
+								text: "Type Public Appointment"
 							})
 						]
 					});
@@ -79,7 +80,8 @@
 			title: "Legend",
 			content: [oLegend],
 			endButton: new sap.m.Button({
-				text: "Close", press: function (oEvent) {
+				text: "Close",
+				press: function (oEvent) {
 					oDialog.close();
 				}
 			})
@@ -90,6 +92,7 @@
 		var oEventLabel = new sap.m.Label({text: "Events log"});
 		function createFooter(){
 			return new sap.m.Bar({
+				contentLeft: new sap.m.Input("inputFocusHelper", {value: "VisualTest focus helper, Don't remove."}),
 				contentMiddle: [new sap.m.Button({
 					text: "PlanningCalendar",
 					press: function(){
@@ -368,6 +371,7 @@
 			icon: "sap-icon://header",
 			type: sap.m.ButtonType.Transparent,
 			pressed: true,
+			tooltip: "Toggle planning calendar showIntervalHeaders property",
 			press: function(oEvent) {
 				var oPC = sap.ui.getCore().byId("PC1");
 				var bPressed = oEvent.getParameter("pressed");
@@ -378,6 +382,7 @@
 		var oButtonShowRowHeaders = new sap.m.ToggleButton("B_ShowRowHead", {
 			icon: "sap-icon://person-placeholder",
 			type: sap.m.ButtonType.Transparent,
+			tooltip: "Toggle planning calendar showRowHeaders property",
 			pressed: true,
 			press: function(oEvent) {
 				var oPC = sap.ui.getCore().byId("PC1");
@@ -386,9 +391,21 @@
 			}
 		});
 
+		var oButtonShowWeekNumbers = new sap.m.ToggleButton("B_ShowWeekNumbers", {
+			type: sap.m.ButtonType.Transparent,
+			text: "Weeks",
+			tooltip: "Toggle week numbers",
+			press: function(oEvent) {
+				var oPC = sap.ui.getCore().byId("PC1");
+				var bPressed = oEvent.getParameter("pressed");
+				oPC.setShowWeekNumbers(bPressed);
+			}
+		});
+
 		var oButtonLegend = new sap.m.Button("B_Legend", {
 			icon: "sap-icon://legend",
 			type: sap.m.ButtonType.Transparent,
+			tooltip: "Open PlanningCalendar legend",
 			press: handleLegend
 		});
 
@@ -396,6 +413,7 @@
 			icon: "sap-icon://resize-vertical",
 			type: sap.m.ButtonType.Transparent,
 			pressed: false,
+			tooltip:"Toggle appointmentsReducedHeight property",
 			press: function(oEvent) {
 				var oPC = sap.ui.getCore().byId("PC1");
 				var bPressed = oEvent.getParameter("pressed");
@@ -443,13 +461,13 @@
 			tooltip: "Toggle Day Names Line",
 			type: sap.m.ButtonType.Transparent,
 			press: function (oEvent) {
-				oPC1.setShowDayNamesLine(!oPC1.getShowDayNamesLine());
+				oPC1.setShowDayNamesLine(oEvent.getParameter("pressed"));
 			}
 		});
 
 		var oButtonToggleCustomViews = new sap.m.ToggleButton({
 			icon: "sap-icon://chart-table-view",
-			tooltip: "Add custom views",
+			tooltip: "Toggle custom predefined custom views",
 			type: sap.m.ButtonType.Transparent,
 			press: function (oEvent) {
 				if (oEvent.getParameter("pressed")) {
@@ -573,9 +591,20 @@
 			text: "Title"
 		});
 
+
+		var oButtonSwitchLegendAssociation = new sap.m.Switch({
+			state: true,
+			change: function(oEvent) {
+				var vLegend = oEvent.getParameter("state") ? oLegend : "";
+				oPC1.setLegend(vLegend);
+			}
+		});
+		var oLegendLabel = new sap.m.Label({text: "Legend Connected to PC", labelFor: oButtonSwitchLegendAssociation.getId()});
+
 		var oPC1 = sap.m.PlanningCalendar("PC1", {
 			startDate: new Date("2015", "0", "1", "08", "00"),
 			rows: [ new sap.m.PlanningCalendarRow("Row1", {
+						customData: new sap.ui.core.CustomData({key: "myKey", value: "myValue", writeToDom: true}),
 						icon: "sap-icon://employee",
 						title: "Max Mustermann",
 						text: "Musterteam",
@@ -1025,6 +1054,15 @@
 								tooltip: "Heilige 3 Könige"
 							}),
 							new sap.ui.unified.DateTypeRange({
+								startDate: new Date(2015, 0, 10),
+								type: sap.ui.unified.CalendarDayType.Type01,
+								tooltip: "Lunch"
+							}),
+							new sap.ui.unified.DateTypeRange({
+								startDate: new Date(2015, 0, 6),
+								type: sap.ui.unified.CalendarDayType.NonWorking
+							}),
+							new sap.ui.unified.DateTypeRange({
 								startDate: new Date(2015, 1, 1),
 								endDate: new Date(2015, 1, 3),
 								type: sap.ui.unified.CalendarDayType.Type03,
@@ -1040,7 +1078,10 @@
 							 oButtonAddRow,
 							 oButtonShowIntervalHeaders,
 							 oButtonShowRowHeaders,
+							 oButtonShowWeekNumbers,
 							 oButtonLegend,
+							 oLegendLabel,
+							 oButtonSwitchLegendAssociation,
 							 oButtonReducedHeight,
 							 oButtonToggleAlternatingRowColor,
 							 oButtonToggleSpecNoWork,
@@ -1049,7 +1090,7 @@
 							 oButtonToggleCustomViews,
 							 oVisSelect,
 							 oGroupModeSelect],
-			legend: "Legend1",
+			legend: oLegend,
 			appointmentSelect: handleAppointmentSelect,
 			startDateChange: handleStartDateChange,
 			rowHeaderClick: handleRowHeaderClick,

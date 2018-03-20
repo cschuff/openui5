@@ -6,13 +6,11 @@
 * Provides a private class <code>sap.f.semantic.SemanticConfiguration</code>.
 */
 sap.ui.define([
-	"jquery.sap.global",
 	"sap/ui/base/Metadata",
 	"sap/ui/core/IconPool",
 	"sap/m/library",
 	"sap/m/OverflowToolbarLayoutData"
-], function(jQuery,
-			Metadata,
+], function(Metadata,
 			IconPool,
 			mobileLibrary,
 			OverflowToolbarLayoutData) {
@@ -263,9 +261,10 @@ sap.ui.define([
 			}
 		};
 
+		// Title Semantic Icon navigation Actions
 		oTypeConfigs["sap.f.semantic.FullScreenAction"] = {
 			placement: SemanticConfiguration._Placement.titleIcon,
-			order: 3,
+			order: 0,
 			constraints: "IconOnly",
 			navigation : true,
 			getSettings: function() {
@@ -282,7 +281,7 @@ sap.ui.define([
 
 		oTypeConfigs["sap.f.semantic.ExitFullScreenAction"] = {
 			placement: SemanticConfiguration._Placement.titleIcon,
-			order: 4,
+			order: 1,
 			constraints: "IconOnly",
 			navigation : true,
 			getSettings: function() {
@@ -299,7 +298,7 @@ sap.ui.define([
 
 		oTypeConfigs["sap.f.semantic.CloseAction"] = {
 			placement: SemanticConfiguration._Placement.titleIcon,
-			order: 5,
+			order: 2,
 			constraints: "IconOnly",
 			navigation : true,
 			getSettings: function() {

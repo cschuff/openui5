@@ -3,13 +3,18 @@
  */
 
 /**
- * This class provides the possibly to declare the "view" part of a composite control
+ * This class provides the possibility to declare the "view" part of a composite control
  * in an XML fragment which will automatically define the rendering accordingly.
- * Additionally, the XMLComposite allows aggregations defined on the control
+ * Additionally, the <code>XMLComposite</code> control allows aggregations defined on the control
  * to be forwarded (on an instance level) to the inner controls used in the
  * XML fragment.
  *
- * CAUTION: naming, location and APIs of this entity will possibly change and should
+ * <b>Note:</b> If you use aggregation forwarding with <code>idSuffix</<code> as defined
+ * in {@link sap.ui.base.ManagedObject ManagedObject} and refer to IDs defined in the XML fragment
+ * of the XML composite control, then these types of <code>idSuffix</<code> have the form
+ * "--ID" where ID is the ID that you have defined in the XML fragment.
+ *
+ * CAUTION: Naming, location and APIs of this entity will possibly change and should
  * therefore be considered experimental
  *
  * @private
@@ -18,14 +23,14 @@
  */
 sap.ui.define([
 	'jquery.sap.global', 'sap/ui/core/Control', 'sap/ui/core/XMLCompositeMetadata', 'sap/ui/model/base/ManagedObjectModel', 'sap/ui/core/util/XMLPreprocessor',
-	'sap/ui/model/json/JSONModel', 'sap/ui/core/Fragment', 'sap/ui/base/ManagedObject', 'sap/ui/base/DataType', 'sap/ui/core/AggregationProxy'
-], function (jQuery, Control, XMLCompositeMetadata, ManagedObjectModel, XMLPreprocessor, JSONModel, Fragment, ManagedObject, DataType, Proxy) {
+	'sap/ui/model/json/JSONModel', 'sap/ui/core/Fragment', 'sap/ui/base/ManagedObject', 'sap/ui/base/DataType', 'sap/ui/model/base/XMLNodeAttributesModel'
+], function (jQuery, Control, XMLCompositeMetadata, ManagedObjectModel, XMLPreprocessor, JSONModel, Fragment, ManagedObject, DataType, XMLNodeAttributesModel) {
 	"use strict";
 
 	// private functions
 	var mControlImplementations = {};
 
-	function initXMLComposite (sFragment, oFragmentContext) {
+	function initXMLComposite(sFragment, oFragmentContext) {
 		if (!mControlImplementations[sFragment]) {
 			jQuery.sap.require(sFragment);
 			mControlImplementations[sFragment] = jQuery.sap.getObject(sFragment);
@@ -33,7 +38,7 @@ sap.ui.define([
 		return mControlImplementations[sFragment];
 	}
 
-	function parseScalarType (sType, sValue, sName, oController) {
+	function parseScalarType(sType, sValue, sName, oController) {
 		// check for a binding expression (string)
 		var oBindingInfo = ManagedObject.bindingParser(sValue, oController, true);
 		if (oBindingInfo && typeof oBindingInfo === "object") {
@@ -46,7 +51,7 @@ sap.ui.define([
 			if (oType instanceof DataType) {
 				vValue = oType.parseValue(sValue);
 			}
-		// else keep original sValue (e.g. for enums)
+			// else keep original sValue (e.g. for enums)
 		} else {
 			throw new Error("Property " + sName + " has unknown type " + sType);
 		}
@@ -55,23 +60,21 @@ sap.ui.define([
 		return typeof vValue === "string" ? ManagedObject.bindingParser.escape(vValue) : vValue;
 	}
 
-	function addAttributesContext (mContexts, sName, oElement, oImpl, oVisitor) {
-		var oAttributesModel = new JSONModel(oElement),
-			oMetadata = oImpl.getMetadata(),
-			mAggregations = oMetadata.getAllAggregations(),
-			mProperties = oMetadata.getAllProperties(),
-			mSpecialSettings = oMetadata._mAllSpecialSettings;
+	function addAttributesContext(mContexts, sName, oElement, oImpl, oVisitor) {
+		var oAttributesModel = new JSONModel(oElement), oMetadata = oImpl.getMetadata(), mAggregations = oMetadata.getAllAggregations(), mProperties = oMetadata.getAllProperties(), mSpecialSettings = oMetadata._mAllSpecialSettings;
 
-		oAttributesModel.getVisitor = function () {
+		oAttributesModel.getVisitor = function() {
 			return oVisitor;
 		};
-		oAttributesModel.getProperty = function (sPath, oContext) {
+
+		oAttributesModel._getObject = function(sPath, oContext) {
 			var oResult;
 			sPath = this.resolve(sPath, oContext);
 			sPath = sPath.substring(1);
+			var aPath = sPath.split("/");
 
 			if (sPath && sPath.startsWith && sPath.startsWith("metadataContexts")) {
-				return this._navInMetadataContexts(sPath);//note as metadataContexts is an object the path can be deep
+				return this._navInMetadataContexts(sPath);// note as metadataContexts is an object the path can be deep
 			}
 
 			if (mProperties.hasOwnProperty(sPath)) {
@@ -91,15 +94,33 @@ sap.ui.define([
 				}
 				return null;
 
-			} else if (mAggregations.hasOwnProperty(sPath)) {
-				var oAggregation = mAggregations[sPath];
-				if (oAggregation.multiple === true && oAggregation.type === "TemplateMetadataContext") {
-					if (!oElement.hasAttribute(sPath)) {
-						return null;
-					}
-					return oElement.getAttribute(sPath);
+			} else if (mAggregations.hasOwnProperty(aPath[0])) {
+				var oAggregation = mAggregations[aPath[0]], sControlName = oMetadata.getName(), sNamespace = sControlName.slice(0, sControlName.lastIndexOf("."));
+				var oAggregationModel, oContent = oElement.getElementsByTagNameNS(sNamespace, aPath[0])[0];
+				if (!oContent) {
+					return null;
 				}
-				return oElement.getAttribute(sPath);
+
+				if (oAggregation.multiple) {
+					// return a list of context
+					var oChild, aContexts = [];
+					for (var i = 0; i < oContent.childNodes.length; i++) {
+						oChild = oContent.childNodes[i];
+
+					if (oChild.nodeType == 1 /* Node.ELEMENT_NODE */) {
+							oAggregationModel = new XMLNodeAttributesModel(oChild, oVisitor, "");
+							aContexts.push(oAggregationModel.getContext("/"));
+						}
+					}
+
+					oResult = aContexts;
+				} else {
+					oAggregationModel = new XMLNodeAttributesModel(oContent, oVisitor, "");
+					oResult = oAggregationModel.getContext("/");
+				}
+
+				aPath.shift();
+				return this._getNode(aPath, oResult);
 			} else if (mSpecialSettings.hasOwnProperty(sPath)) {
 				var oSpecialSetting = mSpecialSettings[sPath];
 
@@ -125,15 +146,20 @@ sap.ui.define([
 		};
 
 		oAttributesModel._navInMetadataContexts = function(sPath) {
-			var sRemainPath = sPath.replace("metadataContexts/","");
-			var sInnerPath,aPath = sRemainPath.split("/");
+			var sRemainPath = sPath.replace("metadataContexts", "");
+			var aPath = sRemainPath.split("/"), vNode = mContexts["metadataContexts"].getObject();
 
-			var oResult,vNode = mContexts["metadataContexts"].getObject();
+			aPath.shift();
+			return this._getNode(aPath, vNode);
+		};
+
+		oAttributesModel._getNode = function(aPath, vNode) {
+			var oResult = null, sInnerPath;
 
 			while (aPath.length > 0 && vNode) {
 
 				if (vNode.getObject) {
-					//try to nav deep
+					// try to nav deep
 					oResult = vNode.getObject(aPath.join("/"));
 				}
 
@@ -146,16 +172,20 @@ sap.ui.define([
 			}
 
 			return vNode;
-
 		};
 
-		oAttributesModel.getContextName = function () {
+		oAttributesModel.getContextName = function() {
 			return sName;
 		};
+
 		mContexts[sName] = oAttributesModel.getContext("/");
+		if (mContexts["metadataContexts"]) {
+			// make attributes model available via metadataContexts
+			mContexts["metadataContexts"].oModel.setProperty("/" + sName, mContexts[sName]);
+		}
 	}
 
-	function addSingleContext(mContexts,oVisitor, oCtx,oMetadataContexts,sDefaultMetaModel) {
+	function addSingleContext(mContexts, oVisitor, oCtx, oMetadataContexts, sDefaultMetaModel) {
 		oCtx.model = oCtx.model || sDefaultMetaModel;
 
 		var sKey = oCtx.name || oCtx.model || undefined;
@@ -169,24 +199,24 @@ sap.ui.define([
 		} catch (ex) {
 			// ignore the context as this can only be the case if the model is not ready, i.e. not a preprocessing model but maybe a model for
 			// providing afterwards
-			mContexts["_$error"].oModel.setProperty("/" + sKey,ex);
+			mContexts["_$error"].oModel.setProperty("/" + sKey, ex);
 		}
 	}
 
-	function addMetadataContexts(mContexts,oVisitor,sMetadataContexts,sDefaultMetadataContexts,sDefaultMetaModel) {
+	function addMetadataContexts(mContexts, oVisitor, sMetadataContexts, sDefaultMetadataContexts, sDefaultMetaModel) {
 		if (!sMetadataContexts && !sDefaultMetadataContexts) {
 			return;
 		}
 
-		var oMetadataContexts = sMetadataContexts ? ManagedObject.bindingParser(sMetadataContexts) : { parts: []};
-		var oDefaultMetadataContexts = sDefaultMetadataContexts ? ManagedObject.bindingParser(sDefaultMetadataContexts) : { parts: []};
+		var oMetadataContexts = sMetadataContexts ? ManagedObject.bindingParser(sMetadataContexts) : { parts: [] };
+		var oDefaultMetadataContexts = sDefaultMetadataContexts ? ManagedObject.bindingParser(sDefaultMetadataContexts) : { parts: [] };
 
 		if (!oDefaultMetadataContexts.parts) {
 			oDefaultMetadataContexts = { parts: [oDefaultMetadataContexts] };
 		}
 
 		if (!oMetadataContexts.parts) {
-			oMetadataContexts = {parts: [oMetadataContexts]};
+			oMetadataContexts = { parts: [oMetadataContexts] };
 		}
 
 		// merge the arrays
@@ -194,7 +224,9 @@ sap.ui.define([
 
 		// extend the contexts from metadataContexts
 		for (var j = 0; j < oMetadataContexts.parts.length; j++) {
-			addSingleContext(mContexts,oVisitor, oMetadataContexts.parts[j],oMetadataContexts,sDefaultMetaModel);
+			addSingleContext(mContexts, oVisitor, oMetadataContexts.parts[j], oMetadataContexts, sDefaultMetaModel);
+			// Make sure every previously defined context can be used in the next binding
+			oVisitor = oVisitor["with"](mContexts, false);
 		}
 
 		var oMdCModel = new JSONModel(oMetadataContexts);
@@ -208,11 +240,48 @@ sap.ui.define([
 	// also e.g. models which are not specifically defined on the composite control
 	// but are propagated from outside of it. Ideally, we would only return
 	// settings which are specifically defined on the XMLComposite !
-	function getSettings (oPropagates) {
+	function getSettings(oPropagates) {
 		var oSettings = {};
 		oSettings.models = oPropagates.oModels || {};
 		oSettings.bindingContexts = oPropagates.oBindingContexts || {};
 		return oSettings;
+	}
+
+	function templateAggregations(oParent, oMetadata, oContextVisitor) {
+		var aAggregationFragments = oMetadata._aggregationFragments,
+			sLibrary = oMetadata.getLibraryName(),
+			bCheckMultiple;
+		if (aAggregationFragments) {
+			Object.keys(aAggregationFragments).forEach(function(sAggregationName) {
+				var oAggregation = oMetadata.getAggregation(sAggregationName);
+
+				if (!oAggregation) {
+					return true;
+				}
+				//check if there are user defined aggregations
+				var oAggregationRoot = oParent.getElementsByTagNameNS(sLibrary, sAggregationName)[0];
+				if (!oAggregationRoot) {
+					oAggregationRoot = document.createElementNS(sLibrary, sAggregationName);
+					oParent.appendChild(oAggregationRoot);
+					bCheckMultiple = false;
+				} else {
+					bCheckMultiple = true;
+				}
+
+				if (bCheckMultiple && !oAggregation.multiple) {
+					return true;// in case the user defined own content this shall win
+				}
+
+				var oAggregationFragment = aAggregationFragments[sAggregationName].cloneNode(true);
+				// resolve templating in composite aggregation fragment
+				oContextVisitor.visitChildNodes(oAggregationFragment);
+
+				// add the templated content
+				for (var j = oAggregationFragment.childElementCount; j > 0; j--) {
+					oAggregationRoot.appendChild(oAggregationFragment.children[0]);
+				}
+			});
+		}
 	}
 
 	/**
@@ -338,6 +407,23 @@ sap.ui.define([
 	 */
 	var XMLComposite = Control.extend("sap.ui.core.XMLComposite", {
 		metadata: {
+			properties: {
+
+				/**
+				 * The width
+				 */
+				width: { type: "sap.ui.core.CSSSize", group: "Dimension", defaultValue: '100%', invalidate: true },
+
+				/**
+				 * The height
+				 */
+				height: { type: "sap.ui.core.CSSSize", group: "Dimension", defaultValue: null, invalidate: true },
+
+				/**
+				 * Whether the CSS display should be set to "block".
+				 */
+				displayBlock: { type: "boolean", group: "Appearance", defaultValue: true, invalidate: true }
+			},
 			aggregations: {
 				/**
 				 * Aggregation used to store the default content
@@ -353,8 +439,25 @@ sap.ui.define([
 		renderer: function (oRm, oControl) {
 			oRm.write("<div");
 			oRm.writeControlData(oControl);
+
+			// compare ViewRenderer.js - we negate since opposite default
+			if (!oControl.getDisplayBlock() && (oControl.getWidth() !== "100%" || oControl.getHeight() !== "100%")) {
+				oRm.addStyle("display", "inline-block");
+			}
 			oRm.writeClasses(); // to make class="..." in XMLViews and addStyleClass() work
+
+			// add inline styles
+			if (oControl.getHeight()) {
+				oRm.addStyle("height", oControl.getHeight());
+			}
+			if (oControl.getWidth()) {
+				oRm.addStyle("width", oControl.getWidth());
+			}
+			oRm.writeStyles();
+
 			oRm.write(">");
+
+			// render the content
 			var oContent = oControl.getAggregation(oControl.getMetadata().getCompositeAggregationName());
 			if (oContent) {
 				oRm.renderControl(oContent);
@@ -386,7 +489,7 @@ sap.ui.define([
 	 * @returns {sap.ui.core.Element} element by its ID or <code>undefined</code>
 	 * @protected
 	 */
-	XMLComposite.prototype.byId = function(sId) {
+	XMLComposite.prototype.byId = function (sId) {
 		return sap.ui.getCore().byId(Fragment.createId(this.getId(), sId));
 	};
 
@@ -745,7 +848,7 @@ sap.ui.define([
 	XMLComposite.initialTemplating = function (oElement, oVisitor, sFragment) {
 		var oImpl = initXMLComposite(sFragment),
 			oErrorModel = new JSONModel({}),
-			mContexts = { "_$error": oErrorModel.getContext("/")},
+			mContexts = { "_$error": oErrorModel.getContext("/") },
 			oMetadata = oImpl.getMetadata(),
 			oFragment = oMetadata.getFragment(),
 			sDefaultMetadataContexts = oMetadata._mSpecialSettings.metadataContexts ? oMetadata._mSpecialSettings.metadataContexts.defaultValue : "";
@@ -754,105 +857,16 @@ sap.ui.define([
 			throw new Error("Fragment " + sFragment + " not found");
 		}
 
-		addMetadataContexts(mContexts,oVisitor,oElement.getAttribute("metadataContexts"),sDefaultMetadataContexts,oImpl.prototype.defaultMetaModel);
+		addMetadataContexts(mContexts, oVisitor, oElement.getAttribute("metadataContexts"), sDefaultMetadataContexts, oImpl.prototype.defaultMetaModel);
 		addAttributesContext(mContexts, oImpl.prototype.alias, oElement, oImpl, oVisitor);
 		var oContextVisitor = oVisitor["with"](mContexts, true);
-		var	mMetadata = oImpl.getMetadata();
+		templateAggregations(oElement, oMetadata, oContextVisitor);
 		// resolve templating
 		oContextVisitor.visitChildNodes(oFragment);
-		var oNode = oFragment.ownerDocument.createElementNS("http://schemas.sap.com/sapui5/extension/sap.ui.core.xmlcomposite/1", mMetadata.getCompositeAggregationName());
+		var oNode = oFragment.ownerDocument.createElementNS("http://schemas.sap.com/sapui5/extension/sap.ui.core.xmlcomposite/1", oMetadata.getCompositeAggregationName());
 		oNode.appendChild(oFragment);
 		oElement.appendChild(oNode);
 	};
 
-	/**
-	 * TODO: Where to put default helpers
-	 */
-	XMLComposite.helper = {
-		// Annotation Helper to go to the meta model context of the corresponding meta model
-		listContext: function (oContext) {
-			var oBindingInfo = oContext.getModel().getProperty(oContext.getPath());
-			if (typeof oBindingInfo === "string") {
-				oBindingInfo = ManagedObject.bindingParser(oBindingInfo);
-			}
-			if (jQuery.isArray(oBindingInfo)) {
-				var oBinding = oContext.getModel().getProperty(oContext.getPath() + "/@binding");
-				if (oBinding) {
-					return oBinding.getModel().getMetaModel().getMetaContext(oBinding.getPath());
-				} else {
-					return undefined;
-				}
-			}
-			if (typeof oBindingInfo === "object") {
-				var oVisitor = oContext.getModel().getVisitor();
-				var oModel = oVisitor.getSettings().models[oBindingInfo.model];
-				if (oModel) {
-					return oModel.createBindingContext(oBindingInfo.path);
-				}
-				return null;
-			} else {
-				return undefined;
-			}
-		},
-		// TODO: very similar to listContext, maybe parts like the identical first 60% can be factored out
-		listMetaContext: function (oContext) {
-			var oBindingInfo = oContext.getModel().getProperty(oContext.getPath());
-			if (typeof oBindingInfo === "string") {
-				oBindingInfo = ManagedObject.bindingParser(oBindingInfo);
-			}
-			if (jQuery.isArray(oBindingInfo)) {
-				var oBinding = oContext.getModel().getProperty(oContext.getPath() + "/@binding");
-				if (oBinding) {
-					return oBinding.getModel().getMetaModel().getMetaContext(oBinding.getPath());
-				} else {
-					return undefined;
-				}
-			}
-			if (typeof oBindingInfo === "object") {
-				var oVisitor = oContext.getModel().getVisitor();
-				oBindingInfo = ManagedObject.bindingParser("{" + oBindingInfo.path + "}");
-				var oModel = oVisitor.getSettings().models[oBindingInfo.model];
-				if (oModel) {
-					var oMetaModel = oModel.getMetaModel();
-					if (oMetaModel && oMetaModel.getMetaContext) {
-						return oMetaModel.getMetaContext(oBindingInfo.path);
-					}
-				}
-				return null;
-			} else {
-				return undefined;
-			}
-		},
-
-		// Annotation Helper to bind a property to the managed object model
-		runtimeProperty: function (oContext, vValue) {
-			if (oContext.getModel().getContextName) {
-				return "{$" + oContext.getModel().getContextName() + ">" + oContext.getPath() + "}";
-			}
-			return vValue;
-		},
-
-		// Annotation Helper to bind a property to the managed object model
-		runtimeBinding: function (oContext, vValue) {
-			return "{Name}";
-		},
-
-		// Annotation Helper to bind an aggregation
-		runtimeListBinding: function (oContext, vValue) {
-			// if the value is an array, this is an resolved list binding and the binding needs to be as string
-			if (jQuery.isArray(vValue)) {
-				var oBinding = oContext.getModel().getProperty(oContext.getPath() + "/@binding");
-				if (oBinding) {
-					return "{path: '" + oBinding.getPath() + "'}";
-				}
-				return null;
-			}
-			return vValue;
-		}
-	};
-	XMLComposite.helper.listMetaContext.requiresIContext = true;
-	XMLComposite.helper.runtimeProperty.requiresIContext = true;
-	XMLComposite.helper.runtimeListBinding.requiresIContext = true;
-	XMLComposite.helper.runtimeBinding.requiresIContext = true;
 	return XMLComposite;
-}, true);
+});

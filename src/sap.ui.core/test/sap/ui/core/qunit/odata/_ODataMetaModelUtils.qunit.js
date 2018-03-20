@@ -439,14 +439,13 @@ sap.ui.require([
 			this.iOldLogLevel = jQuery.sap.log.getLevel(sLoggingModule);
 			// do not rely on ERROR vs. DEBUG due to minified sources
 			jQuery.sap.log.setLevel(jQuery.sap.log.Level.ERROR, sLoggingModule);
-			this.oLogMock = sinon.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(jQuery.sap.log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
-
 		},
+
 		afterEach : function () {
 			jQuery.sap.log.setLevel(this.iOldLogLevel, sLoggingModule);
-			this.oLogMock.verify();
 		}
 	});
 	//*********************************************************************************************
@@ -557,6 +556,7 @@ sap.ui.require([
 		}
 	].forEach(function (oFixture) {
 		var sSemanticsValue = oFixture.sSemantics + ";type=" + oFixture.sTypes;
+
 		QUnit.test("getV4TypesForV2Semantics: " + sSemanticsValue, function (assert) {
 			var bLogExpected = oFixture.sOutput === "" || oFixture.oExpectedMessage,
 				oType = { "name" : "Foo" },
@@ -572,6 +572,33 @@ sap.ui.require([
 			assert.strictEqual(Utils.getV4TypesForV2Semantics(oFixture.sSemantics, oFixture.sTypes,
 				oProperty, oType), oFixture.sOutput, sSemanticsValue);
 		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("getV4TypesForV2Semantics: ignores unknown semantic with type", function (assert) {
+		var sSemantic = "tle;type=cell",
+			oProperty = { "name" : "bar", "sap:semantics" : sSemantic },
+			oType = { "name" : "Foo" };
+
+		assert.strictEqual(Utils.getV4TypesForV2Semantics("tle", "cell", oProperty, oType), "",
+			sSemantic);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("addSapSemantics: url", function (assert) {
+		var oType = {
+				"name" : "BusinessPartner",
+				"property" : [{
+					"name" : "WebAddress",
+					"sap:semantics" : "url"
+				}]
+			};
+
+		// code under test
+		Utils.addSapSemantics(oType);
+
+		assert.deepEqual(oType.property[0/*WebAddress*/]["Org.OData.Core.V1.IsURL"],
+			{"Bool" : "true"});
 	});
 
 	//*********************************************************************************************
@@ -622,6 +649,12 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	[{
+		semantics : "fiscalyear",
+		term : "com.sap.vocabularies.Common.v1.IsFiscalYear"
+	}, {
+		semantics : "fiscalyearperiod",
+		term : "com.sap.vocabularies.Common.v1.IsFiscalYearPeriod"
+	}, {
 		semantics : "year",
 		term : "com.sap.vocabularies.Common.v1.IsCalendarYear"
 	}, {
@@ -630,6 +663,12 @@ sap.ui.require([
 	}, {
 		semantics : "yearmonthday",
 		term : "com.sap.vocabularies.Common.v1.IsCalendarDate"
+	}, {
+		semantics : "yearquarter",
+		term : "com.sap.vocabularies.Common.v1.IsCalendarYearQuarter"
+	}, {
+		semantics : "yearweek",
+		term : "com.sap.vocabularies.Common.v1.IsCalendarYearWeek"
 	}].forEach(function (oFixture) {
 		var sSemantics = oFixture.semantics,
 			sTerm = oFixture.term;
@@ -640,7 +679,7 @@ sap.ui.require([
 					"property" : [{
 						"name" : "Property",
 						"sap:semantics" : sSemantics,
-						"type" : "Edm.String",
+						"type" : "Edm.String"
 					}]
 				},
 				oExpectedResult = clone(oType);
@@ -1129,6 +1168,8 @@ sap.ui.require([
 		role : "dimension", term : "com.sap.vocabularies.Analytics.v1.Dimension"
 	}, {
 		role : "measure", term : "com.sap.vocabularies.Analytics.v1.Measure"
+	}, {
+		role : "foo", term : "must.not.exist"
 	}].forEach(function (oFixture) {
 		var sRole = oFixture.role;
 
@@ -1139,15 +1180,16 @@ sap.ui.require([
 			// code under test
 			Utils.addV4Annotation(oProperty, oExtension, "Property");
 
-			assert.deepEqual(oProperty[oFixture.term], {"Bool" : "true"});
+			assert.deepEqual(oProperty[oFixture.term],
+				sRole === "foo" ? undefined : {"Bool" : "true"});
 		});
 	});
 
 	//*********************************************************************************************
 	QUnit.test("addUnitAnnotations", function (assert) {
-		var oAnnotationHelperBasicsMock = sinon.mock(_AnnotationHelperBasics),
+		var oAnnotationHelperBasicsMock = this.mock(_AnnotationHelperBasics),
 			oMetaModel = { getProperty : function () {}},
-			oMetaModelMock = sinon.mock(oMetaModel),
+			oMetaModelMock = this.mock(oMetaModel),
 			sPathToEntity0 = "/dataServices/schema/0/entityType/0",
 			sPathToEntity1 = "/dataServices/schema/1/entityType/0",
 			sTargetEntityPath = "/dataServices/schema/0/entityType/1",
@@ -1289,8 +1331,98 @@ sap.ui.require([
 		assert.deepEqual(
 			aSchemas[1].entityType[0].property[1]["Org.OData.Measures.V1.Unit"],
 			{Path :"AnnotationsWidthUnit"});
+	});
 
-		oAnnotationHelperBasicsMock.verify();
-		oMetaModelMock.verify();
+	//*********************************************************************************************
+	QUnit.test("addNavigationFilterRestriction", function (assert) {
+		var oEntitySet = {},
+			oNavigationRestrictions,
+			oProperty0 = {
+				"name" : "Bar"
+				// "sap:filterable" : "false"
+			},
+			oProperty1 = {
+				"name" : "Foo"
+				// "sap:filterable" : "false"
+			};
+
+		// code under test
+		Utils.addNavigationFilterRestriction(oProperty0, oEntitySet);
+		Utils.addNavigationFilterRestriction(oProperty1, oEntitySet);
+
+		oNavigationRestrictions = oEntitySet["Org.OData.Capabilities.V1.NavigationRestrictions"];
+
+		assert.deepEqual(oNavigationRestrictions, {
+			"RestrictedProperties" : [{
+				"NavigationProperty" : {
+					"NavigationPropertyPath" : "Bar"
+				},
+				"FilterRestrictions" : {
+					"Filterable": {"Bool" : "false"}
+				}
+			}, {
+				"NavigationProperty" : {
+					"NavigationPropertyPath" : "Foo"
+				},
+				"FilterRestrictions" : {
+					"Filterable": {"Bool" : "false"}
+				}
+			}]
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("calculateEntitySetAnnotations: calls addNavigationFilterRestriction",
+			function (assert) {
+		var oEntitySet = {},
+			oEntityType = {
+				navigationProperty : [
+					{"sap:filterable" : "false"},
+					{"sap:filterable" : "true"}
+				]
+			};
+
+		this.mock(Utils).expects("addNavigationFilterRestriction")
+			.withExactArgs(sinon.match.same(oEntityType.navigationProperty[0]),
+				sinon.match.same(oEntitySet));
+
+		// code under test
+		Utils.calculateEntitySetAnnotations(oEntitySet, oEntityType);
+	});
+
+	//*********************************************************************************************
+	[
+		{ aArray : null, vValue : "foo", iResult : -1 },
+		{ aArray : undefined, vValue : "foo", iResult : -1 },
+		{ aArray : [], vValue : "foo", iResult : -1 },
+		{ aArray : [], sPropertyName : "bar", vValue : "foo", iResult : -1 },
+		{ aArray : [{ name : "bar" }, { name : "foo" }], vValue : "foo", iResult : 1 },
+		{
+			aArray : [{
+				bar : "foo"
+			}, {
+				bar : "foo"
+			}],
+			sPropertyName : "bar",
+			vValue : "foo",
+			iResult : 0 // take the first one that matches
+		}
+
+	].forEach(function (oFixture, i) {
+		QUnit.test("findIndex: " + i, function (assert) {
+			// code under test
+			assert.strictEqual(
+				Utils.findIndex(oFixture.aArray, oFixture.vValue, oFixture.sPropertyName),
+				oFixture.iResult);
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("findIndex: vExpectedPropertyValue is same object", function (assert) {
+		var oValue = {},
+			aArray = [{ foo : {} }, { foo : oValue }, { foo : {} }];
+
+		// code under test
+		assert.strictEqual(Utils.findIndex(aArray, oValue, "foo"), 1);
 	});
 });

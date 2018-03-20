@@ -11,7 +11,8 @@
 			rows="{path: '/people'}"
 			appointmentsVisualization="Filled"
 			appointmentSelect="handleAppointmentSelect"
-			showEmptyIntervalHeaders="false">
+			showEmptyIntervalHeaders="false"
+			showWeekNumbers="true">
 			<toolbarContent>
 				<Title text="Title" titleStyle="H4"/>
 			</toolbarContent>
@@ -22,6 +23,9 @@
 					text="{role}"
 					appointments="{path : 'appointments', templateShareable: 'true'}"
 					intervalHeaders="{path: 'headers', templateShareable: 'true'}">
+					<customData>
+						<core:CustomData key="emp-name" value="{name}" writeToDom="true"/>
+					</customData>
 					<appointments>
 						<unified:CalendarAppointment
 							startDate="{start}"

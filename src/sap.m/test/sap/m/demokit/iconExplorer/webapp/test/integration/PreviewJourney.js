@@ -12,7 +12,7 @@ sap.ui.define([
 		Given.iStartMyAppOnTheDetailsTab();
 
 		//Actions
-		When.onTheOverviewPage.iLookAtTheScreen();
+		When.onTheOverviewPage.iSelectTheCategoryWithName("All");
 
 		// Assertions
 		Then.onTheOverviewPage.iShouldSeeTheTable();
@@ -85,6 +85,6 @@ sap.ui.define([
 		When.onThePreviewPage.iCopyToClipBoard();
 
 		// Assertions
-		Then.onTheAppPage.iShouldSeeMessageToast();
+		Then.onTheAppPage.iShouldSeeAMessageToast("Copy to clipboard");
 	});
 });

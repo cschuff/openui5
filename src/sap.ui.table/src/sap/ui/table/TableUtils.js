@@ -4,9 +4,9 @@
 
 // Provides helper sap.ui.table.TableUtils.
 sap.ui.define([
-	"jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/ResizeHandler", "sap/ui/core/library", "sap/ui/Device", "sap/ui/model/ChangeReason",
-	"./TableGrouping", "./TableColumnUtils", "./TableMenuUtils", "./library"
-], function(jQuery, Control, ResizeHandler, coreLibrary, Device, ChangeReason, TableGrouping, TableColumnUtils, TableMenuUtils, library) {
+	"jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/ResizeHandler", "sap/ui/core/library", "sap/ui/model/ChangeReason",
+	"./TableGrouping", "./TableColumnUtils", "./TableMenuUtils", "./TableBindingUtils", "./library"
+], function(jQuery, Control, ResizeHandler, coreLibrary, ChangeReason, TableGrouping, TableColumnUtils, TableMenuUtils, TableBindingUtils, library) {
 	"use strict";
 
 	// Shortcuts
@@ -15,13 +15,10 @@ sap.ui.define([
 	var MessageType = coreLibrary.MessageType;
 
 	/**
-	 * The border width of a row in pixels.
-	 *
-	 * @type {int}
-	 * @static
-	 * @constant
+	 * The resource bundle of the sap.ui.table library.
+	 * @type {jQuery.sap.util.ResourceBundle}
 	 */
-	var ROW_BORDER_WIDTH = 1;
+	var oResourceBundle;
 
 	/**
 	 * Table cell type.
@@ -53,86 +50,111 @@ sap.ui.define([
 	CELLTYPE.ANY = CELLTYPE.ANYCONTENTCELL | CELLTYPE.ANYCOLUMNHEADER;
 
 	/**
+	 * The horizontal frame size of a row in pixels. This is the height of a row excluding the content height.
+	 *
+	 * @type {int}
+	 * @static
+	 * @constant
+	 */
+	var ROW_HORIZONTAL_FRAME_SIZE = 1; /* 1px border */
+
+	/**
+	 * The default row content heights in pixels for the different content densities.
+	 *
+	 * @type {sap.ui.table.TableUtils.DefaultRowContentHeight}
+	 * @static
+	 * @constant
+	 * @typedef {Object} sap.ui.table.TableUtils.DefaultRowContentHeight
+	 * @property {int} sapUiSizeCondensed - The default content height of a row in pixels in condensed content density.
+	 * @property {int} sapUiSizeCompact - The default content height of a row in pixels in compact content density.
+	 * @property {int} sapUiSizeCozy - The default content height of a row in pixels in cozy content density.
+	 * @property {int} undefined - The default content height of a row in pixels in case no content density information is available.
+	 */
+	var DEFAULT_ROW_CONTENT_HEIGHT = {
+		sapUiSizeCozy: 48,
+		sapUiSizeCompact: 32,
+		sapUiSizeCondensed: 24,
+		undefined: 32
+	};
+
+	/**
+	 * The default row heights in pixels for the different content densities.
+	 *
+	 * @type {sap.ui.table.TableUtils.DefaultRowHeight}
+	 * @static
+	 * @constant
+	 * @typedef {Object} sap.ui.table.TableUtils.DefaultRowHeight
+	 * @property {int} sapUiSizeCondensed - The default height of a row in pixels in condensed content density.
+	 * @property {int} sapUiSizeCompact - The default height of a row in pixels in compact content density.
+	 * @property {int} sapUiSizeCozy - The default height of a row in pixels in cozy content density.
+	 * @property {int} undefined - The default height of a row in pixels in case no content density information is available.
+	 */
+	var DEFAULT_ROW_HEIGHT = {
+		sapUiSizeCozy: DEFAULT_ROW_CONTENT_HEIGHT.sapUiSizeCozy + ROW_HORIZONTAL_FRAME_SIZE,
+		sapUiSizeCompact: DEFAULT_ROW_CONTENT_HEIGHT.sapUiSizeCompact + ROW_HORIZONTAL_FRAME_SIZE,
+		sapUiSizeCondensed: DEFAULT_ROW_CONTENT_HEIGHT.sapUiSizeCondensed + ROW_HORIZONTAL_FRAME_SIZE,
+		undefined: DEFAULT_ROW_CONTENT_HEIGHT.undefined + ROW_HORIZONTAL_FRAME_SIZE
+	};
+
+	/**
+	 * Reason for updates of the rows. Inherits from {@link sap.ui.model.ChangeReason}.
+	 *
+	 * @type {sap.ui.table.TableUtils.ROWS_UPDATE_REASON}
+	 * @static
+	 * @constant
+	 * @typedef {Object} sap.ui.table.TableUtils.ROWS_UPDATE_REASON
+	 * @property {string} Sort - {@link sap.ui.model.ChangeReason.Sort}
+	 * @property {string} Filter - {@link sap.ui.model.ChangeReason.Filter}
+	 * @property {string} Change - {@link sap.ui.model.ChangeReason.Change}
+	 * @property {string} Context - {@link sap.ui.model.ChangeReason.Context}
+	 * @property {string} Refresh - {@link sap.ui.model.ChangeReason.Refresh}
+	 * @property {string} Expand - {@link sap.ui.model.ChangeReason.Expand}
+	 * @property {string} Collapse - {@link sap.ui.model.ChangeReason.Collapse}
+	 * @property {string} Remove - {@link sap.ui.model.ChangeReason.Remove}
+	 * @property {string} Add - {@link sap.ui.model.ChangeReason.Add}
+	 * @property {string} Binding - {@link sap.ui.model.ChangeReason.Binding}
+	 * @property {string} Render - The table has been rendered.
+	 * @property {string} VerticalScroll - The table has been scrolled vertically.
+	 * @property {string} FirstVisibleRowChange - The first visible row has been changed by API call.
+	 * @property {string} Unbind - The row binding has been removed.
+	 * @property {string} Animation - An animation has been performed.
+	 * @property {string} Resize - The table has been resized.
+	 * @property {string} Zoom - The browsers zoom level has changed.
+	 * @property {string} Unknown - The reason for the update is unknown.
+	 */
+	var ROWS_UPDATE_REASON = {
+		Render: "Render",
+		VerticalScroll: "VerticalScroll",
+		FirstVisibleRowChange: "FirstVisibleRowChange",
+		Unbind: "Unbind",
+		Animation: "Animation",
+		Resize: "Resize",
+		Unknown: "Unknown"
+	};
+	for (var sProperty in ChangeReason) {
+		ROWS_UPDATE_REASON[sProperty] = ChangeReason[sProperty];
+	}
+
+	/**
 	 * Static collection of utility functions related to the sap.ui.table.Table, ...
 	 *
 	 * @author SAP SE
 	 * @version ${version}
 	 * @namespace
-	 * @name sap.ui.table.TableUtils
+	 * @alias sap.ui.table.TableUtils
 	 * @private
 	 */
 	var TableUtils = {
+		// Make other utils available.
+		Grouping: TableGrouping,
+		Column: TableColumnUtils,
+		Menu: TableMenuUtils,
+		Binding: TableBindingUtils,
 
-		Grouping: TableGrouping, //Make grouping utils available here
-		Column: TableColumnUtils, //Make column utils available here
-		Menu: TableMenuUtils, //Make menu utils available here
-
-		/**
-		 * @type {sap.ui.table.TableUtils.CellType}
-		 */
 		CELLTYPE: CELLTYPE,
-
-		/**
-		 * The default row heights in pixels for the different content densities.
-		 *
-		 * @type {DefaultRowHeight}
-		 * @static
-		 * @constant
-		 * @typedef {Object} DefaultRowHeight
-		 * @property {int} sapUiSizeCondensed - The default height of a row in pixels in condensed content density.
-		 * @property {int} sapUiSizeCompact - The default height of a row in pixels in compact content density.
-		 * @property {int} sapUiSizeCozy - The default height of a row in pixels in cozy content density.
-		 * @property {int} undefined - The default height of a row in pixels in case no content density information is available.
-		 */
-		DEFAULT_ROW_HEIGHT: {
-			sapUiSizeCondensed : 24 + ROW_BORDER_WIDTH,
-			sapUiSizeCompact : 32 + ROW_BORDER_WIDTH,
-			sapUiSizeCozy : 48 + ROW_BORDER_WIDTH,
-			undefined : 32 + ROW_BORDER_WIDTH
-		},
-
-		/**
-		 * Reason for updates of the rows. Inherits from {@link sap.ui.model.ChangeReason}.
-		 *
-		 * @type {RowsUpdateReason}
-		 * @static
-		 * @constant
-		 * @typedef {Object} RowsUpdateReason
-		 * @property {string} Sort - {@link sap.ui.model.ChangeReason.Sort}
-		 * @property {string} Filter - {@link sap.ui.model.ChangeReason.Filter}
-		 * @property {string} Change - {@link sap.ui.model.ChangeReason.Change}
-		 * @property {string} Context - {@link sap.ui.model.ChangeReason.Context}
-		 * @property {string} Refresh - {@link sap.ui.model.ChangeReason.Refresh}
-		 * @property {string} Expand - {@link sap.ui.model.ChangeReason.Expand}
-		 * @property {string} Collapse - {@link sap.ui.model.ChangeReason.Collapse}
-		 * @property {string} Remove - {@link sap.ui.model.ChangeReason.Remove}
-		 * @property {string} Add - {@link sap.ui.model.ChangeReason.Add}
-		 * @property {string} Binding - {@link sap.ui.model.ChangeReason.Binding}
-		 * @property {string} Render - The table has been rendered.
-		 * @property {string} VerticalScroll - The table has been scrolled vertically.
-		 * @property {string} FirstVisibleRowChange - The first visible row has been changed by API call.
-		 * @property {string} Unbind - The row binding has been removed.
-		 * @property {string} Animation - An animation has been performed.
-		 * @property {string} Resize - The table has been resized.
-		 * @property {string} Unknown - The reason for the update is unknown.
-		 */
-		RowsUpdateReason: (function() {
-			var mUpdateRowsReason = {};
-
-			for (var sProperty in ChangeReason) {
-				mUpdateRowsReason[sProperty] = ChangeReason[sProperty];
-			}
-
-			mUpdateRowsReason.Render = "Render";
-			mUpdateRowsReason.VerticalScroll = "VerticalScroll";
-			mUpdateRowsReason.FirstVisibleRowChange = "FirstVisibleRowChange";
-			mUpdateRowsReason.Unbind = "Unbind";
-			mUpdateRowsReason.Animation = "Animation";
-			mUpdateRowsReason.Resize = "Resize";
-			mUpdateRowsReason.Unknown = "Unknown";
-
-			return mUpdateRowsReason;
-		})(),
+		ROW_HORIZONTAL_FRAME_SIZE: ROW_HORIZONTAL_FRAME_SIZE,
+		DEFAULT_ROW_HEIGHT: DEFAULT_ROW_HEIGHT,
+		RowsUpdateReason: ROWS_UPDATE_REASON,
 
 		/**
 		 * Returns whether the table has a row header or not
@@ -296,14 +318,53 @@ sap.ui.define([
 		},
 
 		/**
-		 * Returns whether a request is currently in process by the binding.
+		 * Returns whether one or more requests are currently in process by the binding.
 		 *
 		 * @param {sap.ui.table.Table} oTable Instance of the table.
 		 * @returns {boolean} Returns <code>true</code>, if the binding of the table is currently requesting data.
 		 * @private
 		 */
-		hasPendingRequest: function(oTable) {
-			return oTable != null && oTable._bPendingRequest === true;
+		hasPendingRequests: function(oTable) {
+			if (oTable == null) {
+				return false;
+			}
+
+			if (TableUtils.canUsePendingRequestsCounter(oTable)) {
+				return oTable._iPendingRequests > 0;
+			} else {
+				return oTable._bPendingRequest;
+			}
+		},
+
+		/**
+		 * A counter to determine whether there are pending requests can be used if exactly one dataReceived event is fired for every
+		 * dataRequested event. If this is not the case and there can be an imbalance between dataReceived and dataRequested events, a more limited
+		 * method using a boolean flag must be used.
+		 *
+		 * It is not always possible to correctly determine whether there is a pending request, because the table must use a flag instead of a
+		 * counter. A flag is necessary under the following conditions:
+		 *
+		 * If the AnalyticalBinding is created with the parameter "useBatchRequest" set to false, an imbalance between dataRequested and
+		 * dataReceived events can occur. There will be one dataRequested event for every request that would otherwise be part of a batch
+		 * request. But still only one dataReceived event is fired after all responses are received.
+		 *
+		 * If the ODataTreeBindingFlat adapter is applied to the TreeBinding, the adapter fires a dataRequested event on every call of getNodes,
+		 * even if no request is sent. This can happen if the adapter ignores the request, because it finds out there is a pending request which
+		 * covers it. When a request is ignored no dataReceived event is fired.
+		 *
+		 * @param {sap.ui.table.Table} oTable Instance of the table.
+		 * @returns {boolean} Returns <code>true</code>, if the table can use a counter for pending request detection.
+		 */
+		canUsePendingRequestsCounter: function(oTable) {
+			var oBinding = oTable != null ? oTable.getBinding("rows") : null;
+
+			if (TableUtils.isInstanceOf(oBinding, "sap/ui/model/analytics/AnalyticalBinding")) {
+				return oBinding.bUseBatchRequests;
+			} else if (TableUtils.isInstanceOf(oBinding, "sap/ui/model/TreeBinding")) {
+				return false;
+			}
+
+			return true;
 		},
 
 		/**
@@ -417,7 +478,7 @@ sap.ui.define([
 			} else if (typeof oNoData === "string" || oTable.getNoData() instanceof String) {
 				return oNoData;
 			} else {
-				return oTable._oResBundle.getText("TBL_NO_DATA");
+				return TableUtils.getResourceText("TBL_NO_DATA");
 			}
 		},
 
@@ -1071,13 +1132,59 @@ sap.ui.define([
 			}
 
 			return iFirstFixedButtomIndex;
-		}
+		},
 
+		/**
+		 * Gets the resource bundle of the sap.ui.table library. The bundle will be loaded if it is not already loaded or if it should be reloaded.
+		 * After the bundle is loaded, {@link sap.ui.table.TableUtils.getResourceText} can be used to get texts.
+		 *
+		 * @param {object} [mOptions] Configuration options
+		 * @param {boolean} [mOptions.async=false] Whether to load the bundle asynchronously.
+		 * @param {boolean} [mOptions.reload=false] Whether to reload the bundle, if it already was loaded.
+		 * @returns {jQuery.sap.util.ResourceBundle | Promise} The resource bundle, or a Promise if the bundle is loaded asynchronously.
+		 */
+		getResourceBundle: function(mOptions) {
+			mOptions = jQuery.extend({async: false, reload: false}, mOptions);
+
+			if (oResourceBundle && mOptions.reload !== true) {
+				if (mOptions.async === true) {
+					return Promise.resolve(oResourceBundle);
+				} else {
+					return oResourceBundle;
+				}
+			}
+
+			var vResult = sap.ui.getCore().getLibraryResourceBundle("sap.ui.table", mOptions.async === true);
+
+			if (vResult instanceof Promise) {
+				vResult = vResult.then(function(oBundle) {
+					oResourceBundle = oBundle;
+					return oResourceBundle;
+				});
+			} else {
+				oResourceBundle = vResult;
+			}
+
+			return vResult;
+		},
+
+		/**
+		 * Gets a resource text, if the resource bundle was already loaded with {@link sap.ui.table.TableUtils.getResourceBundle}.
+		 *
+		 * @param {string} sKey The key of the resource text.
+		 * @param {string[]} [aValues] List of parameters values which should replace the placeholders.
+		 * @returns {string} The resource text, or an empty string if the resource bundle is not yet loaded.
+		 */
+		getResourceText: function(sKey, aValues) {
+			return oResourceBundle ? oResourceBundle.getText(sKey, aValues) : "";
+		}
 	};
 
-	TableGrouping.TableUtils = TableUtils; // Avoid cyclic dependency
-	TableColumnUtils.TableUtils = TableUtils; // Avoid cyclic dependency
-	TableMenuUtils.TableUtils = TableUtils; // Avoid cyclic dependency
+	// Avoid cyclic dependency.
+	TableGrouping.TableUtils = TableUtils;
+	TableColumnUtils.TableUtils = TableUtils;
+	TableMenuUtils.TableUtils = TableUtils;
+	TableBindingUtils.TableUtils = TableUtils;
 
 	return TableUtils;
 

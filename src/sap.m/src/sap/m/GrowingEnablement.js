@@ -3,9 +3,16 @@
  */
 
 // Provides class sap.m.GrowingEnablement
-sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/NumberFormat'],
-	function(jQuery, BaseObject, NumberFormat) {
+sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/NumberFormat', 'sap/m/library', 'sap/ui/model/ChangeReason', 'sap/ui/base/ManagedObjectMetadata', 'sap/ui/core/HTML'],
+	function(jQuery, BaseObject, NumberFormat, library, ChangeReason, ManagedObjectMetadata, HTML) {
 	"use strict";
+
+
+	// shortcut for sap.m.ListType
+	var ListType = library.ListType;
+
+	// shortcut for sap.m.ListGrowingDirection
+	var ListGrowingDirection = library.ListGrowingDirection;
 
 
 	/**
@@ -36,6 +43,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 			this._sGroupingPath = "";
 			this._bDataRequested = false;
 			this._oContainerDomRef = null;
+			this._iLastItemsCount = 0;
 			this._iTriggerTimer = 0;
 			this._aChunk = [];
 			this._oRM = null;
@@ -83,7 +91,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 		onAfterRendering : function() {
 			var oControl = this._oControl;
 			if (oControl.getGrowingScrollToLoad()) {
-				var oScrollDelegate = sap.m.getScrollDelegate(oControl);
+				var oScrollDelegate = library.getScrollDelegate(oControl);
 				if (oScrollDelegate) {
 					this._oScrollDelegate = oScrollDelegate;
 					oScrollDelegate.setGrowingList(this.onScrollToLoad.bind(this), oControl.getGrowingDirection());
@@ -93,7 +101,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 				this._oScrollDelegate = null;
 			}
 
-			this._updateTriggerDelayed(false);
+			if (!this._bLoading) {
+				this._updateTriggerDelayed(false);
+			}
 		},
 
 		setTriggerText : function(sText) {
@@ -108,7 +118,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 		// determines growing reset with binding change reason
 		// according to UX sort/filter/context should reset the growing
 		shouldReset : function(sChangeReason) {
-			var mChangeReason = sap.ui.model.ChangeReason;
+			var mChangeReason = ChangeReason;
 
 			return 	sChangeReason == mChangeReason.Sort ||
 					sChangeReason == mChangeReason.Filter ||
@@ -124,7 +134,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 		},
 
 		onScrollToLoad: function() {
-			if (!this._bLoading && this._oControl.getGrowingDirection() == sap.m.ListGrowingDirection.Upwards) {
+			if (!this._bLoading && this._oControl.getGrowingDirection() == ListGrowingDirection.Upwards) {
 				var oScrollDelegate = this._oScrollDelegate;
 				this._oScrollPosition = {
 					left : oScrollDelegate.getScrollLeft(),
@@ -191,8 +201,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 			this._oTrigger = new sap.m.CustomListItem({
 				id: sTriggerID,
 				busyIndicatorDelay: 0,
-				type: sap.m.ListType.Active,
-				content: new sap.ui.core.HTML({
+				type: ListType.Active,
+				content: new HTML({
 					content:	'<div class="sapMGrowingListTrigger">' +
 									'<div class="sapMSLITitleDiv sapMGrowingListTriggerText">' +
 										'<span class="sapMSLITitle" id="' + sTriggerID + 'Text">' + jQuery.sap.encodeHTML(sTriggerText) + '</span>' +
@@ -228,6 +238,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 
 		// returns the growing information to be shown at the growing button
 		_getListItemInfo : function() {
+			this._iLastItemsCount = this._oControl.getItems(true).length;
 			return ("[ " + this._iRenderedDataItems + " / " + NumberFormat.getFloatInstance().format(this._oControl.getMaxItemsCount()) + " ]");
 		},
 
@@ -262,7 +273,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 			}
 
 			// after growing-button gets hidden scroll container should still be scrollable
-			return this._oScrollDelegate.getMaxScrollTop() > this._oControl.$("triggerList").outerHeight();
+			return this._oScrollDelegate.getMaxScrollTop() > 80;
 		},
 
 		// destroy all items in the list and cleanup
@@ -294,7 +305,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 
 				if (!oLastItem || oGroupInfo.key !== oBinding.getGroup(oLastItem.getBindingContext(sModelName)).key) {
 					var oGroupHeader = (oBindingInfo.groupHeaderFactory) ? oBindingInfo.groupHeaderFactory(oGroupInfo) : null;
-					if (oControl.getGrowingDirection() == sap.m.ListGrowingDirection.Upwards) {
+					if (oControl.getGrowingDirection() == ListGrowingDirection.Upwards) {
 						this.applyPendingGroupItem();
 						this._fnAppendGroupItem = this.appendGroupItem.bind(this, oGroupInfo, oGroupHeader, bSuppressInvalidate);
 					} else {
@@ -326,7 +337,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 		// creates list item from the factory
 		createListItem : function(oContext, oBindingInfo) {
 			this._iRenderedDataItems++;
-			var oItem = oBindingInfo.factory(sap.ui.base.ManagedObjectMetadata.uid("clone"), oContext);
+			var oItem = oBindingInfo.factory(ManagedObjectMetadata.uid("clone"), oContext);
 			return oItem.setBindingContext(oContext, oBindingInfo.model);
 		},
 
@@ -357,7 +368,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 				return;
 			}
 
-			if (this._oControl.getGrowingDirection() == sap.m.ListGrowingDirection.Upwards) {
+			if (this._oControl.getGrowingDirection() == ListGrowingDirection.Upwards) {
 				this._aChunk.reverse();
 				if (vInsert === true) {
 					vInsert = 0;
@@ -550,7 +561,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 
 			if (bFromScratch) {
 				this.rebuildListItems(aContexts, oBindingInfo, true);
-			} else if (this._oContainerDomRef && aDiff && aDiff.length) {
+			} else if (this._oContainerDomRef && aDiff) {
 				// set the binding context of items inserting/deleting entries shifts the index of all following items
 				this.updateItemsBindingContext(aContexts, oBindingInfo.model);
 				this.applyChunk(vInsertIndex);
@@ -579,7 +590,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 				oControl = this._oControl;
 
 			// If there are no visible columns then also hide the trigger.
-			if (!oTrigger || !oControl || !oControl.shouldRenderItems()) {
+			if (!oTrigger || !oControl || !oControl.shouldRenderItems() || !oControl.getDomRef()) {
 				return;
 			}
 
@@ -600,16 +611,19 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 					iItemsLength = aItems.length,
 					iBindingLength = oBinding.getLength() || 0,
 					bLengthFinal = oBinding.isLengthFinal(),
-					bHasScrollToLoad = oControl.getGrowingScrollToLoad();
+					bHasScrollToLoad = oControl.getGrowingScrollToLoad(),
+					oTriggerDomRef = oTrigger.getDomRef();
+
+				// put the focus to the newly added item if growing button is pressed
+				if (oTriggerDomRef && oTriggerDomRef.contains(document.activeElement)) {
+					(aItems[this._iLastItemsCount] || oControl).focus();
+				}
 
 				// show, update or hide the growing button
 				if (!iItemsLength || !this._iLimit ||
 					(bLengthFinal && this._iLimit >= iBindingLength) ||
 					(bHasScrollToLoad && this._getHasScrollbars())) {
 					oControl.$("triggerList").css("display", "none");
-					if (document.activeElement === oTrigger.getDomRef()) {
-						oControl.$().focus();
-					}
 				} else {
 					if (bLengthFinal) {
 						oControl.$("triggerInfo").css("display", "block").text(this._getListItemInfo());
@@ -620,7 +634,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 				}
 
 				// at the beginning we should scroll to last item
-				if (bHasScrollToLoad && this._oScrollPosition === undefined && oControl.getGrowingDirection() == sap.m.ListGrowingDirection.Upwards) {
+				if (bHasScrollToLoad && this._oScrollPosition === undefined && oControl.getGrowingDirection() == ListGrowingDirection.Upwards) {
 					this._oScrollPosition = {
 						left : 0,
 						top : 0
@@ -641,4 +655,4 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'sap/ui/core/format/Nu
 
 	return GrowingEnablement;
 
-}, /* bExport= */ true);
+});

@@ -24,6 +24,7 @@ sap.ui.require([
 	'sap/uxap/ObjectPageSubSectionLayout',
 	'sap/ui/core/Title',
 	'sap/ui/comp/smartform/Group',
+	'sap/ui/comp/smartform/GroupElement',
 	'sap/ui/comp/smartform/SmartForm',
 	'sap/ui/thirdparty/sinon'
 ],
@@ -49,6 +50,7 @@ function(
 	ObjectPageSubSectionLayout,
 	Title,
 	Group,
+	GroupElement,
 	SmartForm,
     sinon
 ) {
@@ -79,10 +81,6 @@ function(
 	sap.ui.getCore().applyChanges();
 
 	QUnit.module("Given that a SmartForm with OData Binding is given...", {
-		beforeEach : function(assert) {
-		},
-		afterEach : function(assert) {
-		}
 	});
 
 	QUnit.test("when getLabelForElement is called with a function", function(assert) {
@@ -285,102 +283,6 @@ function(
 		});
 	});
 
-	QUnit.done(function( details ) {
-		// If coverage is reuqested, remove the view to not overlap the coverage result
-		if (QUnit.config.coverage == true && details.failed === 0) {
-			jQuery("#test-view").hide();
-			oCompCont.getComponentInstance().destroy();
-		}
-	});
-
-	QUnit.module("Given that the getRelevantContainerDesigntimeMetadata method is called on an overlay", {
-		beforeEach : function(assert) {
-
-			this.oTitle0 = new Title({id : "Title0"});
-			this.oLabel0 = new Label({id : "Label0"});
-			this.oInput0 = new Input({id : "Input0"});
-			this.oSimpleForm = new SimpleForm("SimpleForm", {
-				title : "Simple Form",
-				content : [this.oTitle0, this.oLabel0, this.oInput0]
-			});
-
-			this.oVerticalLayout = new VerticalLayout({
-				content : [this.oSimpleForm]
-			}).placeAt("test-view");
-
-			sap.ui.getCore().applyChanges();
-
-			this.oFormContainer = this.oSimpleForm.getAggregation("form").getAggregation("formContainers")[0];
-
-			this.oDesignTime = new DesignTime({
-				rootElements: [
-					this.oVerticalLayout
-				],
-				plugins: []
-			});
-
-			var that = this;
-			var done = assert.async();
-			this.oDesignTime.attachEventOnce("synced", function() {
-				that.oLayoutOverlay = OverlayRegistry.getOverlay(that.oVerticalLayout);
-				that.oSimpleFormOverlay = OverlayRegistry.getOverlay(that.oSimpleForm);
-				that.oFormContainerOverlay = OverlayRegistry.getOverlay(that.oFormContainer);
-				done();
-			});
-		},
-		afterEach : function(assert) {
-			this.oVerticalLayout.destroy();
-			this.oDesignTime.destroy();
-		}
-	});
-
-	QUnit.test("when an overlay has no publicParentAggregationOverlay", function(assert) {
-		this.oSimpleFormOverlay.setDesignTimeMetadata({
-			actions : {}
-		});
-		assert.notOk(Utils.getRelevantContainerDesigntimeMetadata(this.oFormContainerOverlay), "then it returns false");
-	});
-
-	QUnit.module("Given that the getRelevantContainerDesigntimeMetadata method is called on an overlay", {
-		beforeEach : function(assert) {
-
-			this.oSmartGroup = new Group("group");
-			this.oSmartForm = new SmartForm("SmartForm", {
-				groups : [this.oSmartGroup]
-			});
-
-			this.oVerticalLayout = new VerticalLayout({
-				content : [this.oSmartForm]
-			}).placeAt("test-view");
-
-			sap.ui.getCore().applyChanges();
-
-			this.oDesignTime = new DesignTime({
-				rootElements: [
-					this.oVerticalLayout
-				],
-				plugins: []
-			});
-
-			var that = this;
-			var done = assert.async();
-			this.oDesignTime.attachEventOnce("synced", function() {
-				that.oLayoutOverlay = OverlayRegistry.getOverlay(that.oVerticalLayout);
-				that.oSmartFormOverlay = OverlayRegistry.getOverlay(that.oSmartForm);
-				that.oGroupOverlay = OverlayRegistry.getOverlay(that.oSmartGroup);
-				done();
-			});
-		},
-		afterEach : function(assert) {
-			this.oVerticalLayout.destroy();
-			this.oDesignTime.destroy();
-		}
-	});
-
-	QUnit.test("when an overlay has publicParentAggregationOverlay", function(assert) {
-		assert.ok(Utils.getRelevantContainerDesigntimeMetadata(this.oSmartFormOverlay), "then there is a publicParent designtimemetadata");
-	});
-
 	QUnit.module("Given that the ObjectPage with overlays is given...", {
 		beforeEach : function(assert) {
 
@@ -499,9 +401,48 @@ function(
 			"when oObjectPageSubSection3Overlay parameter set then oObjectPageSubSection1Overlay is returned");
 	});
 
-	QUnit.test("when setRtaStyleClassName is called in sap_belize", function(assert) {
-		var sExpectedStyleClass = "sapContrast";
-		this.sandbox.stub(sap.ui.getCore().getConfiguration(), "getTheme").returns("sap_belize");
+	// -------------------------- Tests that don't need the runtimeAuthoring page --------------------------
+
+	QUnit.module("Given some dom elements in and out of viewport...", {
+		beforeEach: function(assert) {
+			if (oCompCont) {
+				oCompCont.destroy();
+			}
+
+			this.$insideDom = jQuery('<input/>').appendTo('#test-view');
+			this.$outsideDom = jQuery('<button/>').appendTo('#test-view');
+
+			this.$insideDom.css("margin-bottom", jQuery("#test-view").get(0).clientHeight);
+			this.$insideDom.css("margin-right", jQuery("#test-view").get(0).clientWidth);
+			this.$insideDom.css("margin-top", "10px");
+		},
+		afterEach: function(assert) {
+			this.$insideDom.remove();
+			this.$outsideDom.remove();
+		}
+	});
+
+	QUnit.test("when isElementInViewport is called from inside viewport", function(assert) {
+		assert.ok(Utils.isElementInViewport(this.$insideDom), "then the function returns true");
+		assert.ok(Utils.isElementInViewport(this.$insideDom.get(0)), "then the function returns true");
+	});
+
+	QUnit.test("when isElementInViewport is called from outside viewport", function(assert) {
+		assert.notOk(Utils.isElementInViewport(this.$outsideDom), "then the function returns false");
+		assert.notOk(Utils.isElementInViewport(this.$outsideDom.get(0)), "then the function returns false");
+	});
+
+	QUnit.module("Given a sinon sandbox...", {
+		beforeEach : function(assert) {
+			this.sandbox = sinon.sandbox.create();
+		},
+		afterEach : function(assert) {
+			this.sandbox.restore();
+		}
+	});
+
+	QUnit.test("when setRtaStyleClassName is called", function(assert) {
+		var sExpectedStyleClass = "sapContrast sapContrastPlus";
 		Utils._sRtaStyleClassName = "";
 
 		Utils.setRtaStyleClassName("Invalid Layer");
@@ -517,21 +458,58 @@ function(
 		assert.equal(Utils.getRtaStyleClassName(), sExpectedStyleClass, "then the StyleClass is set");
 	});
 
-	QUnit.test("when setRtaStyleClassName is called in sap_belize_plus", function(assert) {
-		var sExpectedStyleClass = "sapContrastPlus";
-		this.sandbox.stub(sap.ui.getCore().getConfiguration(), "getTheme").returns("sap_belize_plus");
-		Utils._sRtaStyleClassName = "";
+	QUnit.module("Given two generic objects...", {
+		beforeEach : function(){
 
-		Utils.setRtaStyleClassName("Invalid Layer");
-		assert.equal(Utils.getRtaStyleClassName(), "", "then the StyleClass is not set");
+			this.oObject1 = {
+				function11 : function(){
+					return "function11Object1";
+				},
+				function12 : function(){}
+			};
 
-		Utils.setRtaStyleClassName("CUSTOMER");
-		assert.equal(Utils.getRtaStyleClassName(), sExpectedStyleClass, "then the StyleClass is set");
+			this.oObject2 = {
+				function21 : function(){},
+				function11 : function(){
+					return "function11Object2";
+				}
+			};
+		}
+	});
 
-		Utils.setRtaStyleClassName("USER");
-		assert.equal(Utils.getRtaStyleClassName(), "", "then the StyleClass is reset");
+	QUnit.test("when extendWith is called with a customizer function that always returns true", function(assert){
+		var fnCustomizer = function(){
+			return true;
+		};
 
-		Utils.setRtaStyleClassName("VENDOR");
-		assert.equal(Utils.getRtaStyleClassName(), sExpectedStyleClass, "then the StyleClass is set");
+		assert.notOk(this.oObject1.function21, "then the object does not have function21");
+		Utils.extendWith(this.oObject1, this.oObject2, fnCustomizer);
+		assert.ok(this.oObject1.function21, "then the object has been extended to include function21");
+		assert.equal(this.oObject1.function11(), "function11Object2", "then function11 from Object2 is now in Object1");
+	});
+
+	QUnit.test("when extendWith is called with a customizer function that always returns false", function(assert){
+		var fnCustomizer = function(){
+			return false;
+		};
+
+		var oObject1Before = this.oObject1;
+		Utils.extendWith(this.oObject1, this.oObject2, fnCustomizer);
+		assert.deepEqual(oObject1Before, this.oObject1, "then the Object was not modified");
+	});
+
+	QUnit.test("when mergeWith is called with a customizer function", function(assert){
+
+		var fnCustomizer = function(vDestinationValue, vSourceValue, sProperty, mDestination, mSource){
+			return function(){ return "mergedProperty"; };
+		};
+
+		assert.equal(this.oObject1.function11(), "function11Object1", "at first the function returns 'function11Object1'");
+		Utils.mergeWith(this.oObject1, this.oObject2, fnCustomizer);
+		assert.equal(this.oObject1.function11(), "mergedProperty", "then the merged function returns 'mergedProperty'");
+	});
+
+	QUnit.done(function() {
+		jQuery("#test-view").hide();
 	});
 });

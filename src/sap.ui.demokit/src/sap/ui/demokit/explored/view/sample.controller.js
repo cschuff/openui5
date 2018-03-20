@@ -9,7 +9,6 @@ sap.ui.define([
 	'sap/ui/core/ComponentContainer',
 	'sap/ui/core/HTML',
 	'sap/ui/core/UIComponent',
-	'sap/ui/core/mvc/Controller',
 	'sap/ui/core/routing/History',
 	'sap/ui/model/json/JSONModel',
 	'sap/m/library',
@@ -17,10 +16,10 @@ sap.ui.define([
 	'../util/ToggleFullScreenHandler',
 	'../data',
 	'sap/ui/demokit/explored/view/base.controller',
-	"sap/ui/fl/FakeLrepConnectorLocalStorage",
-	"sap/ui/fl/Utils"
+	'sap/ui/fl/FakeLrepConnectorLocalStorage',
+	'sap/ui/fl/Utils'
 ],
-function (jQuery, Device, Component, ComponentContainer, HTML, UIComponent, Controller, History, JSONModel, mobileLibrary, Text, ToggleFullScreenHandler, data, Base, FakeLrepConnectorLocalStorage, Utils) {
+function(jQuery, Device, Component, ComponentContainer, HTML, UIComponent, History, JSONModel, mobileLibrary, Text, ToggleFullScreenHandler, data, Base, FakeLrepConnectorLocalStorage, Utils) {
 	"use strict";
 
 	var SampleController = Base.extend("sap.ui.demokit.explored.view.sample", {
@@ -62,7 +61,7 @@ function (jQuery, Device, Component, ComponentContainer, HTML, UIComponent, Cont
 			}
 
 			// set nav button visibility
-			var oPage = this.getView().byId("page");
+			var oPage = this.byId("page");
 			var oHistory = History.getInstance();
 			var oPrevHash = oHistory.getPreviousHash();
 			oModelData.showNavButton = Device.system.phone || !!oPrevHash;
@@ -222,7 +221,7 @@ function (jQuery, Device, Component, ComponentContainer, HTML, UIComponent, Cont
 		_loadRuntimeAuthoring : function() {
 			try {
 				sap.ui.require(["sap/ui/rta/RuntimeAuthoring"], function (RuntimeAuthoring) {
-					this.getView().byId("toggleRTA").setVisible(true);
+					this.byId("toggleRTA").setVisible(true);
 				}.bind(this));
 			} catch (oException) {
 				jQuery.sap.log.info("sap.ui.rta.RuntimeAuthoring could not be loaded, UI adaptation mode is disabled");
@@ -236,8 +235,14 @@ function (jQuery, Device, Component, ComponentContainer, HTML, UIComponent, Cont
 				RuntimeAuthoring
 			) {
 				if (!this._oRTA) {
-					this._oRTA = new RuntimeAuthoring();
-					this._oRTA.setRootControl(this.getView().byId("page").getContent()[0]);
+					// default developerMode for CUSTOMER-layer is 'true'
+					this._oRTA = new RuntimeAuthoring({flexSettings: {
+						developerMode: false
+					}});
+					this._oRTA.setRootControl(this.byId("page").getContent()[0]);
+					this._oRTA.attachStop(function() {
+						this._oRTA.destroy();
+					}.bind(this));
 					this._oRTA.start();
 				}
 			}.bind(this));

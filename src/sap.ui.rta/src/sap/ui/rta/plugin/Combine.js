@@ -4,8 +4,14 @@
 
 // Provides class sap.ui.rta.plugin.Combine.
 sap.ui.define([
-	'sap/ui/rta/plugin/Plugin', 'sap/ui/dt/Selection', 'sap/ui/dt/OverlayRegistry', 'sap/ui/rta/Utils'
-], function(Plugin, Selection, OverlayRegistry, Utils) {
+	'sap/ui/rta/plugin/Plugin',
+	'sap/ui/dt/OverlayRegistry',
+	'sap/ui/rta/Utils'
+], function(
+	Plugin,
+	OverlayRegistry,
+	Utils
+) {
 	"use strict";
 
 	/**
@@ -41,10 +47,7 @@ sap.ui.define([
 	 * @private
 	 */
 	Combine.prototype._isEditable = function(oOverlay) {
-		if (!Utils.getRelevantContainerDesigntimeMetadata(oOverlay)) {
-			return false;
-		}
-		var oCombineAction = this._getCombineAction(oOverlay);
+		var oCombineAction = this.getAction(oOverlay);
 		if (oCombineAction && oCombineAction.changeType && oCombineAction.changeOnRelevantContainer) {
 			return this.hasChangeHandler(oCombineAction.changeType, oOverlay.getRelevantContainer()) && this.hasStableId(oOverlay);
 		} else {
@@ -52,25 +55,17 @@ sap.ui.define([
 		}
 	};
 
-	/**
-	 * @param	{sap.ui.dt.Overlay} oOverlay overlay object
-	 * @return {sap.ui.dt.DesignTimeMetadata} oDesignTimeMetadata
-	 * @private
-	 */
-	Combine.prototype._getCombineAction = function(oOverlay) {
-		return oOverlay.getDesignTimeMetadata().getAction("combine", oOverlay.getElementInstance());
-	};
-
 	Combine.prototype._checkForSameRelevantContainer = function(aSelectedOverlays) {
-		var aElements = [];
 		var aRelevantContainer = [];
 		for (var i = 0, n = aSelectedOverlays.length; i < n; i++) {
-			aElements[i] = aSelectedOverlays[i].getElementInstance();
 			aRelevantContainer[i] = aSelectedOverlays[i].getRelevantContainer();
+			var oCombineAction = this.getAction(aSelectedOverlays[i]);
+			if (!oCombineAction || !oCombineAction.changeType){
+				return false;
+			}
 			if (i > 0) {
 				if ((aRelevantContainer[0] !== aRelevantContainer[i])
-					|| (aElements[0].getMetadata().getName() !== aElements[i].getMetadata().getName())) {
-
+					|| (this.getAction(aSelectedOverlays[0]).changeType !== oCombineAction.changeType)) {
 					return false;
 				}
 			}
@@ -85,8 +80,8 @@ sap.ui.define([
 	 * @return {boolean} true if available
 	 * @public
 	 */
-	Combine.prototype.isCombineAvailable = function(oOverlay) {
-		var aSelectedOverlays = this.getDesignTime().getSelection();
+	Combine.prototype.isAvailable = function(oOverlay) {
+		var aSelectedOverlays = this.getSelectedOverlays();
 
 		if (aSelectedOverlays.length <= 1) {
 			return false;
@@ -101,21 +96,21 @@ sap.ui.define([
 	 * @return {boolean} true if enabled
 	 * @public
 	 */
-	Combine.prototype.isCombineEnabled = function(oOverlay) {
-		var aSelectedOverlays = this.getDesignTime().getSelection();
+	Combine.prototype.isEnabled = function(oOverlay) {
+		var aSelectedOverlays = this.getSelectedOverlays();
 
-		// check that no more than 3 fields can be combined
-		if (!this.isCombineAvailable(oOverlay) || aSelectedOverlays.length <= 1) {
+		// check that at least 2 fields can be combined
+		if (!this.isAvailable(oOverlay) || aSelectedOverlays.length <= 1) {
 			return false;
 		}
 
 		var aSelectedControls = aSelectedOverlays.map(function (oSelectedOverlay) {
-			return oSelectedOverlay.getElementInstance();
+			return oSelectedOverlay.getElement();
 		});
 
 		// check that each selected element has an enabled action
 		var bActionCheck = aSelectedOverlays.every(function(oSelectedOverlay) {
-			var oAction = this._getCombineAction(oSelectedOverlay);
+			var oAction = this.getAction(oSelectedOverlay);
 			if (!oAction) {
 				return false;
 			}
@@ -143,21 +138,51 @@ sap.ui.define([
 		var oDesignTimeMetadata = oElementOverlay.getDesignTimeMetadata();
 
 		var aToCombineElements = [];
-		var aSelectedOverlays = this.getDesignTime().getSelection();
+		var aSelectedOverlays = this.getSelectedOverlays();
 
 		for (var i = 0; i < aSelectedOverlays.length; i++) {
-			var oSelectedElement = aSelectedOverlays[i].getElementInstance();
+			var oSelectedElement = aSelectedOverlays[i].getElement();
 			aToCombineElements.push(oSelectedElement);
 		}
+
+		var oCombineAction = this.getAction(oElementOverlay);
+		var sVariantManagementReference = this.getVariantManagementReference(oElementOverlay, oCombineAction);
 
 		var oCombineCommand = this.getCommandFactory().getCommandFor(oCombineElement, "combine", {
 			source : oCombineElement,
 			combineFields : aToCombineElements
-		}, oDesignTimeMetadata);
+		}, oDesignTimeMetadata, sVariantManagementReference);
 		this.fireElementModified({
 			"command" : oCombineCommand
 		});
+	};
 
+	/**
+	 * Retrieve the context menu item for the action.
+	 * @param  {sap.ui.dt.ElementOverlay} oOverlay Overlay for which the context menu was opened
+	 * @return {object[]}          Returns array containing the items with required data
+	 */
+	Combine.prototype.getMenuItems = function(oOverlay){
+		return this._getMenuItems(oOverlay, {pluginId : "CTX_GROUP_FIELDS", rank : 90, icon : "sap-icon://border"});
+	};
+
+	/**
+	 * Get the name of the action related to this plugin.
+	 * @return {string} Returns the action name
+	 */
+	Combine.prototype.getActionName = function(){
+		return "combine";
+	};
+
+	/**
+	 * Trigger the plugin execution.
+	 * @param  {sap.ui.dt.ElementOverlay[]} aOverlays Selected overlays; targets of the action
+	 * @param  {any} oEventItem ContextMenu item which triggers the event
+	 * @param  {any} oContextElement Element where the action is triggered
+	 */
+	Combine.prototype.handler = function(aOverlays, mPropertyBag){
+		//TODO: Handle "Stop Cut & Paste" depending on alignment with Dietrich!
+		this.handleCombine(mPropertyBag.contextElement);
 	};
 
 	return Combine;

@@ -26,7 +26,6 @@
 <script>
 
 	var oResourceBundle = sap.ui.getCore().getLibraryResourceBundle("sap.m");
-
 	QUnit.module("Basic", {
 		beforeEach : function() {
 			this.multiInput1 = new sap.m.MultiInput();
@@ -104,7 +103,8 @@
 		var TEXT = "text",
 			KEY = "key",
 			token1 = new sap.m.Token({text : TEXT, key : KEY}),
-			multiInputClone;
+			multiInputClone,
+			fnTokenizerDestroySpy = this.spy(sap.m.Tokenizer.prototype, "destroy");
 
 		this.multiInput1.addToken(token1);
 
@@ -112,6 +112,7 @@
 		multiInputClone = this.multiInput1.clone();
 
 		//assert
+		assert.strictEqual(fnTokenizerDestroySpy.callCount, 1, "The tokenizer was destroyed once during cloning");
 		assert.equal(multiInputClone.getTokens().length, 1, "Cloned MultiInput contains 1 token");
 		assert.equal(multiInputClone.getTokens()[0].getText(), TEXT, "Cloned token has correct text");
 
@@ -271,55 +272,6 @@
 		assert.equal(this.multiInput1.getTokens()[0].getText(), "Arnold", "The data binding has been applied properly");
 	});
 
-	/*
-	 * When setTokens is used between MultiInput's model updates there should be proper token destroying.
-	 */
-	QUnit.test("data binding when setTokens is used before a model update", function(assert) {
-		jQuery.sap.require("sap.ui.model.json.JSONModel");
-
-		// arrange
-		var data = {
-			names: [
-				{firstName: "Peter"},
-				{firstName: "Martin"},
-				{firstName: "Thomas"},
-				{firstName: "John"}
-			]
-		};
-		var newData = {
-			names: [
-				{firstName: "Arnold"},
-				{firstName: "Chuck"},
-				{firstName: "Silvester"},
-				{firstName: "Jason"}
-			]
-		}
-
-		// create a Model with the data above
-		var model = new sap.ui.model.json.JSONModel();
-		model.setData(data);
-
-		var oTokenTemplate = new sap.m.Token({text : "{firstName}"});
-
-		this.multiInput1.setModel(model);
-		this.multiInput1.bindAggregation("tokens", "/names", oTokenTemplate);
-
-		sap.ui.getCore().applyChanges();
-
-		// act
-		this.multiInput1.setTokens([
-			new sap.m.Token({text:'1'}),
-			new sap.m.Token({text:'2'}),
-			new sap.m.Token({text:'3'})
-		]);
-		model.setProperty('/names', newData.names);
-
-		sap.ui.getCore().applyChanges();
-
-		// assert
-		assert.equal(this.multiInput1.getTokens().length, 4, "MultiInput has 4 tokens");
-		assert.equal(this.multiInput1.getTokens()[0].getText(), "Arnold", "The data binding has been applied properly");
-	});
 
 	QUnit.test("tabindex of tokenizer in MultiInput", function(assert) {
 		assert.equal(!this.multiInput1.$().find(".sapMTokenizer").attr("tabindex"), true, "tokenizer has no tabindex if it is in MultiInput");
@@ -1036,6 +988,37 @@
 		}
 	});
 
+	QUnit.test("token update event", function(assert) {
+		var iCount = 0,
+			done = assert.async(),
+			sText;
+
+		assert.expect(2);
+		this.multiInput1.attachTokenUpdate(function() {
+			iCount ++;
+		});
+
+		//arrange
+		this.multiInput1.addValidator(function(args){
+			sText = args.text;
+			var oToken = new sap.m.Token({key:args.text, text:args.text});
+			args.asyncCallback(oToken);
+		});
+
+		//act
+		this.multiInput1.setValue("test");
+		this.multiInput1._validateCurrentText();
+
+		//assert
+		setTimeout(function () {
+			assert.strictEqual(sText, "test", "tokenUpdate event fired with correct text parameter");
+			assert.strictEqual(iCount, 1, "tokenUpdate event should be fired once");
+			done();
+		}, 200);
+
+		this.clock.tick(250);
+	});
+
 	QUnit.test("test suggestionItemSelected event", function(assert) {
 		var testTokenText = "Testtoken";
 		var item = {
@@ -1067,6 +1050,61 @@
 		assert.notOk(spy.called, "Input's ontap method is not called");
 	});
 
+	QUnit.test("Change event is properly fired on different interactions", function (assert) {
+		//Setup
+		var oChangeFireSpy = this.spy(this.multiInput1, "fireChange"),
+			oValidatorSpy = this.spy(function (oParams) {
+				return new sap.m.Token({
+					key: oParams.text,
+					text: oParams.text
+				});
+			});
+		this.multiInput1.addValidator(oValidatorSpy);
+
+
+		//Act
+		//Emulate use input
+		// Modify DOM's value as we don't want to go trough MultiInput's API.
+		this.multiInput1.$("inner").val("Test token");
+		this.multiInput1.onsapenter({});
+		sap.ui.getCore().applyChanges();
+
+		//Assert
+		assert.ok(oChangeFireSpy.calledOnce, "Change is fired");
+		assert.ok(oValidatorSpy.calledOnce, "Validator is fired");
+		assert.ok(oChangeFireSpy.calledBefore(oValidatorSpy), "fireChange is fired before Validator");
+
+		//Act
+		//Emulate use input
+		// Modify DOM's value as we don't want to go trough MultiInput's API.
+		this.multiInput1.bFocusoutDueRendering = false;
+		this.multiInput1.$("inner").val("Test token 2");
+		this.multiInput1.onsapfocusleave({});
+		sap.ui.getCore().applyChanges();
+
+		//Assert
+		assert.ok(oChangeFireSpy.calledTwice, "Change is fired");
+		assert.ok(oValidatorSpy.calledTwice, "Validator is fired");
+		assert.ok(oChangeFireSpy.calledBefore(oValidatorSpy), "fireChange is fired before Validator");
+	});
+
+	QUnit.test("Selecting an item should not leave a text in the input", function (assert) {
+		// arrange
+		var oItem = new sap.ui.core.ListItem({
+			key: '1',
+			text: '1 Item 1'
+		});
+
+		this.multiInput1.addSuggestionItem(oItem);
+		sap.ui.getCore().applyChanges();
+
+		// act
+		this.multiInput1.setSelectionItem(oItem, true);
+		sap.ui.getCore().applyChanges();
+
+		// assert
+		assert.strictEqual(this.multiInput1.getValue(), "", "Value of the input should be empty");
+	});
 
 	QUnit.module("Mobile", {});
 
@@ -1167,12 +1205,13 @@
 		assert.strictEqual(oInfo.description, "Placeholder Tooltip Description Token1 Token2", "Description");
 	});
 
-	QUnit.test("_tokensInfo aggregation", function(assert) {
+	QUnit.test("Tokens information should be read out", function(assert) {
 		// arrange
-		var oInvisibleText = this.multiInput1.getAggregation("_tokensInfo");
+		var sInvisibleTextId = this.multiInput1.getAggregation("tokenizer").getTokensInfoId(),
+			oInvisibleText = sap.ui.getCore().byId(sInvisibleTextId);
 
 		// assert
-		assert.strictEqual(oInvisibleText.getText(), oResourceBundle.getText("MULTIINPUT_ARIA_CONTAIN_TOKEN"), "'MultiInput may contain tokens' text is set.");
+		assert.strictEqual(oInvisibleText.getText(), oResourceBundle.getText("TOKENIZER_ARIA_CONTAIN_TOKEN"), "'MultiInput may contain tokens' text is set.");
 
 		// act
 		this.multiInput1.addToken(new sap.m.Token({text: "Token1"}));
@@ -1180,7 +1219,7 @@
 		sap.ui.getCore().applyChanges();
 
 		// assert
-		assert.strictEqual(oInvisibleText.getText(), oResourceBundle.getText("MULTIINPUT_ARIA_CONTAIN_ONE_TOKEN"), "'MultiInput contains 1 token' text is set.");
+		assert.strictEqual(oInvisibleText.getText(), oResourceBundle.getText("TOKENIZER_ARIA_CONTAIN_ONE_TOKEN"), "'MultiInput contains 1 token' text is set.");
 
 		// act
 		this.multiInput1.addToken(new sap.m.Token({text: "Token2"}));
@@ -1188,7 +1227,7 @@
 		sap.ui.getCore().applyChanges();
 
 		// assert
-		assert.strictEqual(oInvisibleText.getText(), oResourceBundle.getText("MULTIINPUT_ARIA_CONTAIN_SEVERAL_TOKENS", this.multiInput1.getTokens().length), "'MultiInput contains N tokens' text is set.");
+		assert.strictEqual(oInvisibleText.getText(), oResourceBundle.getText("TOKENIZER_ARIA_CONTAIN_SEVERAL_TOKENS", this.multiInput1.getTokens().length), "'MultiInput contains N tokens' text is set.");
 	});
 
 	QUnit.test("Placeholder opacity", function(assert) {
@@ -1260,6 +1299,35 @@
 
 		// cleanup
 		oSpy.restore();
+	});
+
+	QUnit.test("Paste (with suggestions)", function(assert) {
+
+		if (!sap.ui.Device.browser.internet_explorer) {
+			//arrange
+			var sPastedString = "a\nb";
+			this.multiInput1.addSuggestionItem(new sap.ui.core.Item({ text : "a"}));
+			this.multiInput1.addSuggestionItem(new sap.ui.core.Item({ text : "b"}));
+
+			//act
+			sap.ui.test.qunit.triggerEvent("paste", this.multiInput1.getFocusDomRef(), {
+				originalEvent: {
+					clipboardData: {
+						getData: function () {
+							return sPastedString;
+						}
+					}
+				}
+			});
+
+			sap.ui.getCore().applyChanges();
+			this.clock.tick(10);
+
+			//assert
+			assert.equal(this.multiInput1.getTokens().length, 2, "2 tokens should be added to MultiInput on paste");
+		} else {
+			assert.expect(0);
+		}
 	});
 
 	QUnit.test("_convertTextToToken", function(assert) {

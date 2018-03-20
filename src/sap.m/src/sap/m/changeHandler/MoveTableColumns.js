@@ -61,7 +61,7 @@ sap.ui.define([
 
 				var oMovedCell = aCells[iSourceIndex];
 				oModifier.removeAggregation(oRow, CELLS_AGGREGATION_NAME, oMovedCell);
-				oModifier.insertAggregation(oRow, CELLS_AGGREGATION_NAME, oMovedCell, iTargetIndex);
+				oModifier.insertAggregation(oRow, CELLS_AGGREGATION_NAME, oMovedCell, iTargetIndex, oView);
 			},
 			moveColumns = function (iSourceIndex, iTargetIndex) {
 				oModifier.getAggregation(oTable, ITEMS_AGGREGATION_NAME).forEach(function (oItem) {
@@ -107,7 +107,7 @@ sap.ui.define([
 
 			// move children in `columns` aggregation
 			oModifier.removeAggregation(oTable, COLUMNS_AGGREGATION_NAME, oMovedElement);
-			oModifier.insertAggregation(oTable, COLUMNS_AGGREGATION_NAME, oMovedElement, iTargetIndex);
+			oModifier.insertAggregation(oTable, COLUMNS_AGGREGATION_NAME, oMovedElement, iTargetIndex, oView);
 
 			// move children in `items` aggregation (actual content)
 			var oTemplate = oModifier.getBindingTemplate(oTable, ITEMS_AGGREGATION_NAME);
@@ -134,8 +134,6 @@ sap.ui.define([
 	 * @param {sap.ui.core.UIComponent} mPropertyBag.appComponent AppComponent
 	 * @return {boolean} true Indicates whether the change can be applied
 	 * @public
-	 * @function
-	 * @name sap.m.changeHandler.MoveTableColumns#applyChange
 	 */
 	MoveTableColumns.applyChange = function (oChange, oRelevantContainer, mPropertyBag) {
 		var aRevertData = [];
@@ -160,8 +158,6 @@ sap.ui.define([
 	 * @param {sap.ui.core.UIComponent} mPropertyBag.appComponent AppComponent
 	 * @return {boolean} true Indicates whether the change can be applied
 	 * @public
-	 * @function
-	 * @name sap.m.changeHandler.MoveTableColumns#revertChange
 	 */
 	MoveTableColumns.revertChange = function (oChange, oRelevantContainer, mPropertyBag) {
 		var aRevertData = oChange.getRevertData();
@@ -182,8 +178,6 @@ sap.ui.define([
 	 * @param {object} mPropertyBag Map of properties
 	 * @param {sap.ui.core.UiComponent} mPropertyBag.appComponent Component in which the change should be applied
 	 * @public
-	 * @function
-	 * @name sap.m.changeHandler.MoveTableColumns#completeChangeContent
 	 */
 	MoveTableColumns.completeChangeContent = function (oChange, mSpecificChangeInfo, mPropertyBag) {
 		var oModifier = mPropertyBag.modifier,

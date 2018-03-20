@@ -7,11 +7,14 @@ sap.ui.define([
 		"sap/ui/documentation/library",
 		"sap/ui/core/mvc/Controller",
 		"sap/ui/core/routing/History",
-		"sap/ui/documentation/sdk/controller/util/ControlsInfo",
-		"sap/ui/documentation/sdk/controller/util/JSDocUtil",
-		"sap/ui/Device"
-	], function (library, Controller, History, ControlsInfo, JSDocUtil, Device) {
+		"sap/ui/Device",
+		"sap/m/library",
+		"sap/ui/documentation/sdk/controller/util/APIInfo"
+	], function (library, Controller, History, Device, mobileLibrary, APIInfo) {
 		"use strict";
+
+		// shortcut for sap.m.SplitAppMode
+		var SplitAppMode = mobileLibrary.SplitAppMode;
 
 		return Controller.extend("sap.ui.documentation.sdk.controller.BaseController", {
 
@@ -27,12 +30,12 @@ sap.ui.define([
 
 			hideMasterSide : function() {
 				var splitApp = this.getSplitApp();
-				splitApp.setMode(sap.m.SplitAppMode.HideMode);
+				splitApp.setMode(SplitAppMode.HideMode);
 			},
 
 			showMasterSide : function() {
 				var splitApp = this.getSplitApp();
-				splitApp.setMode(sap.m.SplitAppMode.ShowHideMode);
+				splitApp.setMode(SplitAppMode.ShowHideMode);
 			},
 
 			getSplitApp: function() {
@@ -89,7 +92,11 @@ sap.ui.define([
 
 				if (sPreviousHash !== undefined) {
 					// The history contains a previous entry
-					history.go(-1);
+					if (sPreviousHash.indexOf("search/") === 0) {
+						this.getRouter().navTo("search", {searchParam: sPreviousHash.split("/")[1]}, false);
+					} else {
+						history.go(-1);
+					}
 				} else {
 					var sCurrentHash = window.location.hash;
 
@@ -131,45 +138,6 @@ sap.ui.define([
 			},
 
 			/**
-			 * This function wraps a text in a span tag so that it can be represented in an HTML control.
-			 * @param {string} sText
-			 * @returns {string}
-			 * @private
-			 */
-			_wrapInSpanTag: function (sText) {
-
-				var sFormattedTextBlock = JSDocUtil.formatTextBlock(sText, {
-					linkFormatter: function (target, text) {
-
-						var p;
-
-						text = text || target; // keep the full target in the fallback text
-
-						// If the link has a protocol, do not modify, but open in a new window
-						if (target.match("://")) {
-							return '<a target="_blank" href="' + target + '">' + text + '</a>';
-						}
-
-						target = target.trim().replace(/\.prototype\./g, "#");
-						p = target.indexOf("#");
-						if ( p === 0 ) {
-							// a relative reference - we can't support that
-							return "<code>" + target.slice(1) + "</code>";
-						}
-
-						if ( p > 0 ) {
-							target = target.slice(0, p);
-						}
-
-						return "<a class=\"jsdoclink\" href=\"javascript:void(0);\" data-sap-ui-target=\"" + target + "\">" + text + "</a>";
-
-					}
-				});
-
-				return '<span class="sapUiDocumentationJsDoc">' + sFormattedTextBlock + '</span>';
-			},
-
-			/**
 			 * Switches the maximum height of the phone image for optimal display in landscape mode
 			 * @param {sap.ui.base.Event} oEvent Device orientation change event
 			 * @private
@@ -202,8 +170,23 @@ sap.ui.define([
 			 */
 			handleLandingImageLoad: function () {
 				this.getView().byId("landingImageHeadline").setVisible(true);
+			},
+			/**
+			 * Checks if a control has API Reference
+			 * @param {string} sControlName
+			 * @return {Promise} A promise that resolves to {boolean}
+			 */
+            getAPIReferenceCheckPromise: function (sControlName) {
+				return APIInfo.getIndexJsonPromise().then(function (result) {
+					var aFilteredResult;
+
+					aFilteredResult = result.filter(function (element) {
+						return element.name === sControlName;
+					});
+
+					return aFilteredResult && aFilteredResult.length > 0;
+				});
 			}
 		});
-
 	}
 );

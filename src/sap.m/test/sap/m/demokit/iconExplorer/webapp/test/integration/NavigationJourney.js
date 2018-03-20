@@ -11,15 +11,15 @@ sap.ui.define([
 
 		// Arrangements
 		Given.iStartMyApp({
-            delay: 2000 // to really see the busy indicator
-        });
+			delay: 10000 // to really see the busy indicator
+		});
 
 		//Actions
 		When.onTheOverviewPage.iLookAtTheScreen();
 
 		// Assertions
 		Then.onTheAppPage.iShouldSeeTheBusyIndicatorForTheWholeApp().
-			and.iTeardownMyAppFrame();
+			and.iTeardownMyApp();
 	});
 
 	opaTest("Should see the busy indicator on overview table after metadata is loaded", function (Given, When, Then) {
@@ -30,8 +30,7 @@ sap.ui.define([
 		When.onTheAppPage.iWaitUntilTheAppBusyIndicatorIsGone();
 
 		// Assertions
-		Then.onTheOverviewPage.iShouldSeeTheResultsTableBusyIndicatorOrItemsLoaded().
-			and.iTeardownMyAppFrame();
+		Then.onTheOverviewPage.iShouldSeeTheResultsTableBusyIndicatorOrItemsLoaded();
 	});
 
 });

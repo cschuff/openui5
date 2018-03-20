@@ -2,11 +2,13 @@
  * ${copyright}
  */
 
-// Provides class sap.ui.rta.plugin.EasyAdd.
 sap.ui.define([
 	'sap/ui/rta/plugin/additionalElements/AdditionalElementsPlugin',
 	'sap/ui/dt/OverlayRegistry'
-], function(AdditionalElementsPlugin, OverlayRegistry) {
+], function(
+	AdditionalElementsPlugin,
+	OverlayRegistry
+) {
 	"use strict";
 
 	/**
@@ -27,9 +29,6 @@ sap.ui.define([
 	var EasyAdd = AdditionalElementsPlugin.extend("sap.ui.rta.plugin.EasyAdd", /** @lends sap.ui.rta.plugin.EasyAdd.prototype */
 	{
 		metadata: {
-			// ---- object ----
-
-			// ---- control specific ----
 			library: "sap.ui.rta",
 			properties: {},
 			associations: {},
@@ -44,52 +43,7 @@ sap.ui.define([
 	 * @override
 	 */
 	EasyAdd.prototype.registerElementOverlay = function(oOverlay) {
-		this._oDelegate = {
-			"onAfterRendering" : function() {
-				var onAddPressed = function(bOverlayIsSibling, oOverlay, iIndex) {
-					var sControlName;
-					if (bOverlayIsSibling) {
-						sControlName = oOverlay.getDesignTimeMetadata().getName().plural;
-					} else {
-						sControlName = oOverlay.getDesignTimeMetadata().getAggregation("sections").childNames.plural();
-					}
-					this.showAvailableElements(bOverlayIsSibling, [oOverlay], iIndex, sControlName);
-				}.bind(this);
-
-				var fnAddButton = function(oOverlay, oOverlayDom, bSibling, vControlName, iIndex) {
-					var fnCallback = function(oEvent) {
-						var oOverlay = sap.ui.getCore().byId(oEvent.getSource().getId().replace("-AddButton", ""));
-						onAddPressed(bSibling, oOverlay, iIndex);
-						oEvent.cancelBubble();
-					};
-					var sControlName = typeof vControlName === "function" ? vControlName() : vControlName;
-					this._addButton(oOverlay, fnCallback, oOverlayDom, sControlName);
-				}.bind(this);
-
-				if (oOverlay.$().hasClass("sapUiRtaPersAdd")) {
-					var bAddButton = oOverlay.$().hasClass("sapUiRtaPersAdd") && oOverlay.$().children(".sapUiRtaPersAddIconOuter").length <= 0;
-					var oParentControl = oOverlay.getElementInstance().getParent();
-					var oParentOverlay = OverlayRegistry.getOverlay(oParentControl);
-					if (oParentControl.getMetadata().getName() === "sap.uxap.ObjectPageLayout") {
-						if (oParentOverlay.$().hasClass("sapUiRtaPersAddTop") && oParentOverlay.getAggregationOverlay("sections").$().children(".sapUiRtaPersAddIconOuter").length > -1) {
-							oParentControl.$("sectionsContainer").addClass("sapUiRtaPaddingTop");
-						}
-					}
-					if (bAddButton) {
-						fnAddButton(oOverlay, oOverlay.$(), true, oOverlay.getDesignTimeMetadata().getName().singular);
-					}
-				} else if (oOverlay.$().hasClass("sapUiRtaPersAddTop")) {
-					if (oOverlay.getAggregationOverlay("sections").$().children(".sapUiRtaPersAddIconOuter").length <= 0) {
-						var $sectionsOverlay = oOverlay.getAggregationOverlay("sections").$();
-						fnAddButton(oOverlay, $sectionsOverlay, false, oOverlay.getDesignTimeMetadata().getAggregation("sections").childNames.singular, 0);
-					}
-				}
-
-				oOverlay.removeEventDelegate(this._oDelegate, this);
-			}
-		};
-
-		var oControl = oOverlay.getElementInstance();
+		var oControl = oOverlay.getElement();
 		if (oControl.getMetadata().getName() === "sap.uxap.ObjectPageSection" && this.hasStableId(oOverlay)) {
 			oOverlay.addStyleClass("sapUiRtaPersAdd");
 			oControl.addStyleClass("sapUiRtaMarginBottom");
@@ -98,7 +52,38 @@ sap.ui.define([
 			oControl.$("sectionsContainer").addClass("sapUiRtaPaddingTop");
 		}
 
-		oOverlay.addEventDelegate(this._oDelegate, this);
+		var onAddPressed = function(bOverlayIsSibling, oOverlay, iIndex) {
+			var sControlName;
+			if (bOverlayIsSibling) {
+				sControlName = oOverlay.getDesignTimeMetadata().getName().plural;
+			} else {
+				sControlName = oOverlay.getDesignTimeMetadata().getAggregation("sections").childNames.plural();
+			}
+			this.showAvailableElements(bOverlayIsSibling, [oOverlay], iIndex, sControlName);
+		}.bind(this);
+
+		var fnAddButton = function(oOverlay, oOverlayDom, bSibling, vControlName, iIndex) {
+			var fnCallback = function(oEvent) {
+				var oOverlay = OverlayRegistry.getOverlay(oEvent.getSource().getId().replace("-AddButton", ""));
+				onAddPressed(bSibling, oOverlay, iIndex);
+				oEvent.cancelBubble();
+			};
+			var sControlName = typeof vControlName === "function" ? vControlName() : vControlName;
+			this._addButton(oOverlay, fnCallback, oOverlayDom, sControlName, bSibling);
+		}.bind(this);
+
+		if (oOverlay.hasStyleClass("sapUiRtaPersAdd")) {
+			var bAddButton = oOverlay.hasStyleClass("sapUiRtaPersAdd") && oOverlay.$().children(".sapUiRtaPersAddIconOuter").length <= 0;
+			if (bAddButton) {
+				fnAddButton(oOverlay, oOverlay.$(), true, oOverlay.getDesignTimeMetadata().getName().singular);
+			}
+		} else if (oOverlay.hasStyleClass("sapUiRtaPersAddTop")) {
+			if (oOverlay.getAggregationOverlay("sections").$().children(".sapUiRtaPersAddIconOuter").length <= 0) {
+				var $SectionsOverlay = oOverlay.getAggregationOverlay("sections").$();
+				fnAddButton(oOverlay, $SectionsOverlay, false, oOverlay.getDesignTimeMetadata().getAggregation("sections").childNames.singular, 0);
+			}
+		}
+
 		AdditionalElementsPlugin.prototype.registerElementOverlay.apply(this, arguments);
 	};
 
@@ -109,14 +94,13 @@ sap.ui.define([
 	 * @override
 	 */
 	EasyAdd.prototype.deregisterElementOverlay = function(oOverlay) {
-		var oControl = oOverlay.getElementInstance();
+		var oControl = oOverlay.getElement();
 		if (oOverlay._oAddButton) {
 			oOverlay._oAddButton.destroy();
 		}
 		if (oControl.getMetadata().getName() === "sap.uxap.ObjectPageSection") {
 			oOverlay.removeStyleClass("sapUiRtaPersAdd");
 			oControl.removeStyleClass("sapUiRtaMarginBottom");
-			oOverlay.removeEventDelegate(this._oDelegate, this);
 		} else if (oControl.getMetadata().getName() === "sap.uxap.ObjectPageLayout") {
 			oOverlay.removeStyleClass("sapUiRtaPersAddTop");
 			oControl.$("sectionsContainer").removeClass("sapUiRtaPaddingTop");
@@ -124,38 +108,65 @@ sap.ui.define([
 	};
 
 	/**
+	 * On Editable Change the enablement of the Button has to be adapted
+	 *
+	 * @param {sap.ui.dt.Overlay} oOverlay overlay object
+	 * @override
+	 */
+	EasyAdd.prototype._isEditable = function(oOverlay) {
+		var bIsEditable = AdditionalElementsPlugin.prototype._isEditable.apply(this, arguments);
+		if (oOverlay._oAddButton) {
+			var bIsLayout = oOverlay.hasStyleClass("sapUiRtaPersAddTop");
+			var sOverlayIsSibling = bIsLayout ? "asChild" : "asSibling";
+			oOverlay._oAddButton.setEnabled(bIsEditable[sOverlayIsSibling]);
+			if (bIsLayout) {
+				var oLayout = oOverlay.getElement();
+				oLayout.attachEventOnce("onAfterRenderingDOMReady", function() {
+					oLayout.$("sectionsContainer").addClass("sapUiRtaPaddingTop");
+				});
+			}
+		}
+		return bIsEditable;
+	};
+
+	/**
 	 * @param {sap.ui.dt.ElementOverlay} oOverlay - overlay object
 	 * @param {function} fnCallback - callback function will be passed to the new button as on press event function
 	 * @param {object} oOverlayDom - dom object of the overlay
 	 * @param {string} sControlName - name of the control. This name will be displayed on the Add-Button
+	 * @param {boolean} bOverlayIsSibling - defines if the button is added on a sibling or not
 	 * @private
 	 */
-	EasyAdd.prototype._addButton = function(oOverlay, fnCallback, oOverlayDom, sControlName) {
+	EasyAdd.prototype._addButton = function(oOverlay, fnCallback, oOverlayDom, sControlName, bOverlayIsSibling) {
+		var bIsEditable = oOverlay.getEditableByPlugins().indexOf(this._retrievePluginName(bOverlayIsSibling)) > -1;
+		var oTextResources = sap.ui.getCore().getLibraryResourceBundle("sap.ui.rta");
+
 		var sId = oOverlay.getId() + "-AddButton";
 		var oHtmlButtonOuter = jQuery("<div class='sapUiRtaPersAddIconOuter' draggable='true'> </div>");
 		oOverlay._oAddButton = new sap.m.Button(sId, {
-			text: "Add " + sControlName,
+			text: oTextResources.getText("CTX_ADD_ELEMENTS", sControlName),
 			icon: "sap-icon://add",
-			press: fnCallback
+			press: fnCallback,
+			enabled: bIsEditable
 		}).placeAt(oHtmlButtonOuter.get(0));
 		oOverlayDom.append(oHtmlButtonOuter);
 
 		oHtmlButtonOuter[0].addEventListener("mouseover", function(oEvent) {
 			oEvent.stopPropagation();
-			var oOverlay = oEvent.fromElement ? sap.ui.getCore().byId(oEvent.fromElement.id) : null;
+			var oOverlay = oEvent.fromElement ? OverlayRegistry.getOverlay(oEvent.fromElement.id) : null;
 			if (oOverlay && oOverlay.getMetadata().getName() === "sap.ui.dt.ElementOverlay") {
 				var oParentContainer = oOverlay.getParentElementOverlay();
-				oParentContainer.$().removeClass("sapUiRtaOverlayHover");
+				oParentContainer.removeStyleClass("sapUiRtaOverlayHover");
 			}
 		});
 
 		oHtmlButtonOuter[0].addEventListener("mouseleave", function(oEvent) {
 			oEvent.stopPropagation();
-			var oOverlay = oEvent.toElement ? sap.ui.getCore().byId(oEvent.toElement.id) : null;
+			var oOverlay = oEvent.toElement ? OverlayRegistry.getOverlay(oEvent.toElement.id) : null;
 			if (oOverlay && oOverlay.getMetadata().getName() === "sap.ui.dt.ElementOverlay") {
 				var oParentContainer = oOverlay.getParentElementOverlay();
 				if (oParentContainer.getMovable()) {
-					oParentContainer.$().addClass("sapUiRtaOverlayHover");
+					oParentContainer.addStyleClass("sapUiRtaOverlayHover");
 				}
 			}
 		});

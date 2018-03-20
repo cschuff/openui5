@@ -1,4 +1,5 @@
 sap.ui.define([
+	'jquery.sap.global',
 	'sap/ui/demo/cart/controller/BaseController',
 	'sap/ui/model/json/JSONModel',
 	'sap/ui/Device',
@@ -6,9 +7,9 @@ sap.ui.define([
 	'sap/m/MessageBox',
 	'sap/m/Dialog',
 	'sap/m/Button',
-	'sap/ui/core/routing/History',
-	'jquery.sap.global'
+	'sap/ui/core/routing/History'
 ], function (
+	$,
 	BaseController,
 	JSONModel,
 	Device,
@@ -16,8 +17,7 @@ sap.ui.define([
 	MessageBox,
 	Dialog,
 	Button,
-	History,
-	$) {
+	History) {
 	"use strict";
 
 	var sCartModelName = "cartProducts";
@@ -59,7 +59,7 @@ sap.ui.define([
 				oCartModel.setProperty("/showEditButton", true);
 			}
 			//set selection of list back
-			var oEntryList = this.getView().byId("entryList");
+			var oEntryList = this.byId("entryList");
 			oEntryList.removeSelections();
 		},
 
@@ -154,9 +154,10 @@ sap.ui.define([
 			var oEntry = this.getView().getModel(sCartModelName).getProperty(sPath);
 			var sId = oEntry.ProductId;
 			if (!sap.ui.Device.system.phone) {
-				this._oRouter.getTargets().display("productView", {
+				// Update the URL hash making the products inside the cart bookmarkable
+				this._oRouter.navTo("cartProductView", {
 					productId: sId
-				});
+				}, true); // Don't create a history entry
 			} else {
 				this._oRouter.navTo("cartProduct", {productId: sId});
 			}

@@ -8,17 +8,22 @@ sap.ui.require([
 	'sap/ui/comp/smartform/Group',
 	'sap/ui/comp/smartform/GroupElement',
 	'sap/ui/comp/smartform/SmartForm',
+	"sap/ui/core/BusyIndicator",
 	// internal
 	'sap/ui/Device',
 	'sap/ui/dt/plugin/ContextMenu',
 	'sap/ui/dt/DesignTimeMetadata',
 	'sap/ui/dt/OverlayRegistry',
+	'sap/ui/dt/Overlay',
 	'sap/ui/fl/registry/Settings',
 	'sap/ui/fl/registry/ChangeRegistry',
 	'sap/ui/fl/LrepConnector',
 	'sap/ui/fl/Change',
 	'sap/ui/fl/Utils',
+	'sap/ui/rta/Utils',
 	'sap/ui/fl/FakeLrepLocalStorage',
+	'sap/ui/fl/ChangePersistence',
+	'sap/ui/fl/transport/TransportSelection',
 	'sap/ui/rta/RuntimeAuthoring',
 	'sap/ui/rta/command/Stack',
 	'sap/ui/rta/command/CommandFactory',
@@ -29,26 +34,33 @@ sap.ui.require([
 	'sap/ui/base/EventProvider',
 	'sap/ui/rta/command/BaseCommand',
 	'sap/ui/rta/qunit/RtaQunitUtils',
+	'sap/ui/rta/appVariant/Feature',
 	// should be last
 	'sap/ui/thirdparty/sinon',
 	'sap/ui/thirdparty/sinon-ie',
 	'sap/ui/thirdparty/sinon-qunit'
-], function(
+],
+function(
 	Button,
 	MessageBox,
 	Group,
 	GroupElement,
 	SmartForm,
+	BusyIndicator,
 	Device,
 	ContextMenu,
 	DesignTimeMetadata,
 	OverlayRegistry,
+	Overlay,
 	Settings,
 	ChangeRegistry,
 	LrepConnector,
 	Change,
 	Utils,
+	RtaUtils,
 	FakeLrepLocalStorage,
+	ChangePersistence,
+	TransportSelection,
 	RuntimeAuthoring,
 	Stack,
 	CommandFactory,
@@ -59,7 +71,9 @@ sap.ui.require([
 	EventProvider,
 	RTABaseCommand,
 	RtaQunitUtils,
-	sinon) {
+	RtaAppVariantFeature,
+	sinon
+) {
 	"use strict";
 
 	QUnit.start();
@@ -84,7 +98,7 @@ sap.ui.require([
 			FakeLrepLocalStorage.deleteChanges();
 
 			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl")
+				rootControl : oComp.getAggregation("rootControl")
 			});
 
 			return Promise.all([
@@ -95,7 +109,7 @@ sap.ui.require([
 			]);
 		},
 		afterEach : function(assert) {
-			this.oRta.exit();
+			this.oRta.destroy();
 			FakeLrepLocalStorage.deleteChanges();
 			sandbox.restore();
 		}
@@ -121,10 +135,13 @@ sap.ui.require([
 	});
 
 	QUnit.test("when setFlexSettings is called", function(assert) {
-		assert.deepEqual(this.oRta.getFlexSettings(), {
-			layer: "CUSTOMER",
-			developerMode: true
-		});
+		assert.deepEqual(
+			this.oRta.getFlexSettings(),
+			{
+				layer: "CUSTOMER",
+				developerMode: true
+			}
+		);
 
 		this.oRta.setFlexSettings({
 			layer: "USER",
@@ -176,86 +193,41 @@ sap.ui.require([
 	});
 
 	QUnit.test("when RTA is stopped ...", function(assert) {
-		return this.oRta.stop().then(function() {
+		var done = assert.async();
+		this.oRta.attachStop(function() {
+			assert.ok(true, "the 'stop' event was fired");
+			done();
+		});
+		this.oRta.stop().then(function() {
 			assert.ok(true, "then the promise got resolved");
-			assert.strictEqual(jQuery(".sapUiRtaToolbar").length, 0, "... and Toolbar is destroyed.");
 		});
 	});
 
-	QUnit.test("when transporting local changes", function(assert) {
-		var oMockTransportInfo = {
-					packageName : "PackageName",
-					transport : "transportId"
-				},
-				oMockTransportedChange = {
-					packageName : "aPackage",
-					fileType : "change",
-					id : "changeId1",
-					namespace : "namespace",
-					getDefinition : function(){
-						return {
-							packageName : this.packageName,
-							fileType : this.fileType
-						};
-					},
-					getId : function(){
-						return this.id;
-					},
-					getNamespace : function(){
-						return this.namespace;
-					},
-					setResponse : function(oDefinition){
-						this.packageName = oDefinition.packageName;
-					},
-					getPackage : function(){
-						return this.packageName;
-					}
-				},
-				oMockNewChange = {
-					packageName : "$TMP",
-					fileType : "change",
-					id : "changeId2",
-					namespace : "namespace",
-					getDefinition : function(){
-						return {
-							packageName : this.packageName,
-							fileType : this.fileType
-						};
-					},
-					getId : function(){
-						return this.id;
-					},
-					getNamespace : function(){
-						return this.namespace;
-					},
-					setResponse : function(oDefinition){
-						this.packageName = oDefinition.packageName;
-					},
-					getPackage : function(){
-						return this.packageName;
-					}
-				},
-				aMockLocalChanges = [oMockTransportedChange, oMockNewChange],
-				oMockFlexController = {
-					getComponentChanges : function(){
-						return Promise.resolve(aMockLocalChanges);
-					}
-				},
-				oMockLrepConnector = {
-					send : function(){
-						return Promise.resolve();
-					}
-				};
-		sandbox.stub(LrepConnector, "createConnector").returns(oMockLrepConnector);
-		sandbox.stub(Utils, "getClient").returns('');
-		sandbox.stub(this.oRta, "_getFlexController").returns(oMockFlexController);
-		var stubMessageToast = sandbox.stub(this.oRta, "_showMessageToast").returns();
+	QUnit.test("when RTA is destroyed", function (assert) {
+		return this.oRta.stop().then(function() {
+			this.oRta.destroy();
+			assert.strictEqual(jQuery(".sapUiRtaToolbar").length, 0, "... and Toolbar is destroyed.");
+		}.bind(this));
+	});
 
-		return this.oRta._transportAllLocalChanges(oMockTransportInfo).then(function(){
-			assert.equal(aMockLocalChanges[0].packageName, "aPackage", "then the transported local change is not updated");
-			assert.equal(aMockLocalChanges[1].packageName, oMockTransportInfo.packageName, "but the new local change is updated");
-			assert.ok(stubMessageToast.calledOnce, "and success message called");
-		});
+	QUnit.test("when setMode is called", function(assert) {
+		var oTabhandlingPlugin = this.oRta.getPlugins()["tabHandling"];
+		var oTabHandlingRemoveSpy = sandbox.spy(oTabhandlingPlugin, "removeTabIndex");
+		var oTabHandlingRestoreSpy = sandbox.spy(oTabhandlingPlugin, "restoreTabIndex");
+		var oFireModeChangedSpy = sandbox.stub(this.oRta, "fireModeChanged");
+
+		this.oRta.setMode("navigation");
+		assert.notOk(this.oRta._oDesignTime.getEnabled(), "then the designTime property enabled is false");
+		assert.ok(oTabHandlingRestoreSpy.callCount, 1, "restoreTabIndex was called");
+		assert.ok(oFireModeChangedSpy.callCount, 1, "then the event was fired");
+		assert.deepEqual(oFireModeChangedSpy.lastCall.args[0], {mode: "navigation"});
+
+		// simulate mode change from toolbar
+		this.oRta.getToolbar().fireModeChange({key: "adaptation"});
+		assert.ok(this.oRta._oDesignTime.getEnabled(), "then the designTime property enabled is true again");
+		assert.ok(oTabHandlingRemoveSpy.callCount, 1, "removeTabIndex was called");
+		assert.ok(oFireModeChangedSpy.callCount, 2, "then the event was fired again");
+		assert.deepEqual(oFireModeChangedSpy.lastCall.args[0], {mode: "adaptation"});
 	});
 
 	QUnit.module("Given a USER layer change", {
@@ -280,11 +252,11 @@ sap.ui.require([
 			});
 
 			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl")
+				rootControl : oComp.getAggregation("rootControl")
 			});
 		},
 		afterEach : function(assert) {
-			this.oRta.exit();
+			this.oRta.destroy();
 			FakeLrepLocalStorage.deleteChanges();
 			sandbox.restore();
 		}
@@ -292,32 +264,101 @@ sap.ui.require([
 
 	QUnit.test("when RTA is started in the customer layer", function(assert) {
 		var done = assert.async();
-
 		var oFlexController = this.oRta._getFlexController();
 		sandbox.stub(oFlexController, "getComponentChanges").returns(Promise.resolve([]));
 
-		this.oRta.attachStart(function() {
-			assert.equal(this.oRta._oToolsMenu.getControl('restore').getEnabled(), false, "then the Restore Button is disabled");
-			assert.equal(this.oRta._oToolsMenu.getControl('manageApps').getVisible(), false, "then the 'Manage Information' Icon Button is not visible");
+		Promise.all([
+			new Promise(function (fnResolve) {
+				this.oRta.attachStart(fnResolve);
+			}.bind(this)),
+			this.oRta.start()
+		]).then(function() {
+			assert.equal(this.oRta.getToolbar().getControl('restore').getEnabled(), false, "then the Restore Button is disabled");
+			assert.equal(this.oRta.getToolbar().getControl('manageApps').getVisible(), false, "then the 'AppVariant Overview' Icon Button is not visible");
+			assert.equal(this.oRta.getToolbar().getControl('appVariantOverview').getVisible(), false, "then the 'AppVariant Overview' Menu Button is not visible");
+			assert.equal(this.oRta.getToolbar().getControl('manageApps').getEnabled(), false, "then the 'AppVariant Overview' Icon Button is not enabled");
+			assert.equal(this.oRta.getToolbar().getControl('appVariantOverview').getEnabled(), false, "then the 'AppVariant Overview' Menu Button is not enabled");
 			done();
 		}.bind(this));
-
-		this.oRta.start();
 	});
 
 	QUnit.test("when RTA is started in the user layer", function(assert) {
 		var done = assert.async();
-
 		var oFlexController = this.oRta._getFlexController();
 		sandbox.stub(oFlexController, "getComponentChanges").returns(Promise.resolve([this.oUserChange]));
 
-		this.oRta.attachStart(function() {
-			assert.equal(this.oRta._oToolsMenu.getControl('restore').getEnabled(), true, "then the Restore Button is enabled");
+		this.oRta.setFlexSettings({layer: "USER"});
+		Promise.all([
+			new Promise(function (fnResolve) {
+				this.oRta.attachStart(fnResolve);
+			}.bind(this)),
+			this.oRta.start()
+		]).then(function() {
+			assert.equal(this.oRta.getToolbar().getControl('restore').getEnabled(), true, "then the Restore Button is enabled");
 			done();
 		}.bind(this));
+	});
 
-		this.oRta.setFlexSettings({layer: "USER"});
-		this.oRta.start();
+	QUnit.test("when RTA is started in the customer layer, app variant feature is available for a (key user) but the manifest of an app is not supported", function(assert) {
+		var done = assert.async();
+		var oFlexController = this.oRta._getFlexController();
+		sandbox.stub(oFlexController, "getComponentChanges").returns(Promise.resolve([]));
+
+		sandbox.stub(this.oRta, '_getPublishAndAppVariantSupportVisibility').returns(Promise.resolve([true, true]));
+		Promise.all([
+			new Promise(function (fnResolve) {
+				this.oRta.attachStart(fnResolve);
+			}.bind(this)),
+			this.oRta.start()
+		]).then(function() {
+			assert.equal(this.oRta.getToolbar().getControl('manageApps').getVisible(), true, "then the 'AppVariant Overview' Icon Button is visible");
+			assert.equal(this.oRta.getToolbar().getControl('manageApps').getEnabled(), false, "then the 'AppVariant Overview' Icon Button is not enabled");
+			assert.equal(this.oRta.getToolbar().getControl('appVariantOverview').getVisible(), false, "then the 'AppVariant Overview' Menu Button is not visible");
+			assert.equal(this.oRta.getToolbar().getControl('appVariantOverview').getEnabled(), false, "then the 'AppVariant Overview' Menu Button is not enabled");
+			assert.equal(this.oRta.getToolbar().getControl('saveAs').getVisible(), true, "then the 'Save As' Button is visible");
+			assert.equal(this.oRta.getToolbar().getControl('manageApps').getEnabled(), false, "then the 'Save As' Button is not enabled");
+			done();
+		}.bind(this));
+	});
+
+	QUnit.test("when RTA is started in the customer layer, app variant feature is available for an (SAP developer) but the manifest of an app is not supported", function(assert) {
+		var done = assert.async();
+		var oFlexController = this.oRta._getFlexController();
+		sandbox.stub(oFlexController, "getComponentChanges").returns(Promise.resolve([]));
+
+		sandbox.stub(this.oRta, '_getPublishAndAppVariantSupportVisibility').returns(Promise.resolve([true, true]));
+		sandbox.stub(RtaAppVariantFeature, "isOverviewExtended").returns(true);
+		Promise.all([
+			new Promise(function (fnResolve) {
+				this.oRta.attachStart(fnResolve);
+			}.bind(this)),
+			this.oRta.start()
+		]).then(function() {
+			assert.equal(this.oRta.getToolbar().getControl('manageApps').getVisible(), false, "then the 'AppVariant Overview' Icon Button is not visible");
+			assert.equal(this.oRta.getToolbar().getControl('manageApps').getEnabled(), false, "then the 'AppVariant Overview' Icon Button is not enabled");
+			assert.equal(this.oRta.getToolbar().getControl('appVariantOverview').getVisible(), true, "then the 'AppVariant Overview' Menu Button is visible");
+			assert.equal(this.oRta.getToolbar().getControl('appVariantOverview').getEnabled(), false, "then the 'AppVariant Overview' Menu Button is not enabled");
+			assert.equal(this.oRta.getToolbar().getControl('saveAs').getVisible(), true, "then the 'Save As' Button is visible");
+			assert.equal(this.oRta.getToolbar().getControl('manageApps').getEnabled(), false, "then the 'Save As' Button is not enabled");
+			done();
+		}.bind(this));
+	});
+
+	QUnit.test("when _onGetAppVariantOverview is called", function(assert) {
+		var oMenuButton = {
+			getId : function() {
+				return 'keyUser';
+			}
+		};
+
+		var oEmptyEvent = new sap.ui.base.Event("emptyEventId", oMenuButton, {
+			item : oMenuButton
+		});
+
+		var fnAppVariantFeatureSpy = sandbox.stub(RtaAppVariantFeature, "onGetOverview").returns(Promise.resolve(true));
+		return this.oRta._onGetAppVariantOverview(oEmptyEvent).then(function() {
+			assert.ok(fnAppVariantFeatureSpy.calledOnce, "then the onGetOverview() method is called once and the key user view will be shown");
+		});
 	});
 
 	QUnit.module("Given that RuntimeAuthoring is started without toolbar...", {
@@ -325,7 +366,7 @@ sap.ui.require([
 			FakeLrepLocalStorage.deleteChanges();
 
 			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl"),
+				rootControl : oComp.getAggregation("rootControl"),
 				showToolbars : false
 			});
 
@@ -337,7 +378,7 @@ sap.ui.require([
 			]);
 		},
 		afterEach : function(assert) {
-			this.oRta.exit();
+			this.oRta.destroy();
 			FakeLrepLocalStorage.deleteChanges();
 			sandbox.restore();
 		}
@@ -353,13 +394,12 @@ sap.ui.require([
 			this.bMacintoshOriginal = Device.os.macintosh;
 			Device.os.macintosh = false;
 
-			this.fnUndoSpy = sandbox.stub().returns(Promise.resolve());
-			this.fnRedoSpy = sandbox.stub().returns(Promise.resolve());
+			this.fnUndoStub = sandbox.stub().returns(Promise.resolve());
+			this.fnRedoStub = sandbox.stub().returns(Promise.resolve());
 
-			var oToolsMenuDom = jQuery('<input/>').appendTo('#qunit-fixture').get(0);
-			this.oToolsMenuDom = oToolsMenuDom;
-			this.oOverlayContainerDom = jQuery('<button/>').appendTo('#qunit-fixture').get(0);
-			this.oAnyOtherDom = jQuery('<button/>').appendTo('#qunit-fixture').get(0);
+			this.oToolbarDomRef = jQuery('<input/>').appendTo('#qunit-fixture').get(0);
+			this.oOverlayContainer = jQuery('<button/>').appendTo('#qunit-fixture');
+			this.oAnyOtherDomRef = jQuery('<button/>').appendTo('#qunit-fixture').get(0);
 
 			this.oUndoEvent = new Event("dummyEvent", new EventProvider());
 			this.oUndoEvent.keyCode = jQuery.sap.KeyCodes.Z;
@@ -375,16 +415,21 @@ sap.ui.require([
 			this.oRedoEvent.altKey = false;
 			this.oRedoEvent.stopPropagation = function() {};
 
-			sandbox.stub(sap.ui.dt.Overlay, "getOverlayContainer").returns(this.oOverlayContainerDom);
+			sandbox.stub(Overlay, "getOverlayContainer").returns(this.oOverlayContainer);
 
 			this.mContext = {
-				_oToolsMenu: {
-					getDomRef: function() {
-						return oToolsMenuDom;
-					}
+				getToolbar: function () {
+					return {
+						getDomRef: function() {
+							return this.oToolbarDomRef;
+						}.bind(this)
+					};
+				}.bind(this),
+				getShowToolbars: function () {
+					return true;
 				},
-				_onUndo: this.fnUndoSpy,
-				_onRedo: this.fnRedoSpy
+				_onUndo: this.fnUndoStub,
+				_onRedo: this.fnRedoStub
 			};
 		},
 
@@ -395,32 +440,32 @@ sap.ui.require([
 	});
 
 	QUnit.test("with focus on an overlay", function(assert) {
-		this.oOverlayContainerDom.focus();
+		this.oOverlayContainer.get(0).focus();
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oUndoEvent);
-		assert.equal(this.fnUndoSpy.callCount, 1, "then _onUndo was called once");
+		assert.equal(this.fnUndoStub.callCount, 1, "then _onUndo was called once");
 
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oRedoEvent);
-		assert.equal(this.fnRedoSpy.callCount, 1, "then _onRedo was called once");
+		assert.equal(this.fnRedoStub.callCount, 1, "then _onRedo was called once");
 	});
 
 	QUnit.test("with focus on the toolbar", function(assert) {
-		this.oToolsMenuDom.focus();
+		this.oToolbarDomRef.focus();
 
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oUndoEvent);
-		assert.equal(this.fnUndoSpy.callCount, 1, "then _onUndo was called once");
+		assert.equal(this.fnUndoStub.callCount, 1, "then _onUndo was called once");
 
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oRedoEvent);
-		assert.equal(this.fnRedoSpy.callCount, 1, "then _onRedo was called once");
+		assert.equal(this.fnRedoStub.callCount, 1, "then _onRedo was called once");
 	});
 
 	QUnit.test("with focus on an outside element (e.g. dialog)", function(assert) {
-		this.oAnyOtherDom.focus();
+		this.oAnyOtherDomRef.focus();
 
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oUndoEvent);
-		assert.equal(this.fnUndoSpy.callCount, 0, "then _onUndo was not called");
+		assert.equal(this.fnUndoStub.callCount, 0, "then _onUndo was not called");
 
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oRedoEvent);
-		assert.equal(this.fnRedoSpy.callCount, 0, "then _onRedo was not called");
+		assert.equal(this.fnRedoStub.callCount, 0, "then _onRedo was not called");
 	});
 
 	QUnit.test("during rename", function(assert) {
@@ -430,10 +475,18 @@ sap.ui.require([
 		}).appendTo("#qunit-fixture").get(0).focus();
 
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oUndoEvent);
-		assert.equal(this.fnUndoSpy.callCount, 0, "then _onUndo was not called");
+		assert.equal(this.fnUndoStub.callCount, 0, "then _onUndo was not called");
 
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oRedoEvent);
-		assert.equal(this.fnRedoSpy.callCount, 0, "then _onRedo was not called");
+		assert.equal(this.fnRedoStub.callCount, 0, "then _onRedo was not called");
+	});
+
+	QUnit.test("using the public API", function(assert) {
+		RuntimeAuthoring.prototype.undo.call(this.mContext);
+		assert.equal(this.fnUndoStub.callCount, 1, "then _onUndo was called");
+
+		RuntimeAuthoring.prototype.redo.call(this.mContext);
+		assert.equal(this.fnRedoStub.callCount, 1, "then _onRedo was called");
 	});
 
 	QUnit.test("macintosh support", function(assert) {
@@ -441,9 +494,9 @@ sap.ui.require([
 		this.oUndoEvent.ctrlKey = false;
 		this.oUndoEvent.metaKey = true;
 
-		this.oOverlayContainerDom.focus();
+		this.oOverlayContainer.get(0).focus();
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oUndoEvent);
-		assert.equal(this.fnUndoSpy.callCount, 1, "then _onUndo was called once");
+		assert.equal(this.fnUndoStub.callCount, 1, "then _onUndo was called once");
 
 		this.oRedoEvent.keyCode = jQuery.sap.KeyCodes.Z;
 		this.oRedoEvent.ctrlKey = false;
@@ -451,7 +504,7 @@ sap.ui.require([
 		this.oRedoEvent.shiftKey = true;
 
 		RuntimeAuthoring.prototype._onKeyDown.call(this.mContext, this.oRedoEvent);
-		assert.equal(this.fnRedoSpy.callCount, 1, "then _onRedo was called once");
+		assert.equal(this.fnRedoStub.callCount, 1, "then _onRedo was called once");
 	});
 
 	QUnit.module("Given that RuntimeAuthoring based on test-view is available together with a CommandStack with changes...", {
@@ -476,15 +529,7 @@ sap.ui.require([
 				data : {
 					actions : {
 						remove : {
-							changeType : "hideControl",
-							getState : function(oGroupElement) {
-								return {
-									visible : oGroupElement.getVisible()
-								};
-							},
-							restoreState : function(oGroupElement, oState) {
-								oGroupElement.setVisible(oState.visible);
-							}
+							changeType : "hideControl"
 						}
 					}
 				}
@@ -502,25 +547,27 @@ sap.ui.require([
 				//After command has been pushed
 				var fnStackModifiedSpy = sinon.spy(function() {
 
-				// Start RTA with command stack
-				var oRootControl = oCompCont.getComponentInstance().getAggregation("rootControl");
-				this.oRta = new RuntimeAuthoring({
-					rootControl : oRootControl,
-					commandStack : this.oCommandStack,
-					showToolbars : true,
-					flexSettings: {
-						developerMode: false
-					}
-				});
+					// Start RTA with command stack
+					var oRootControl = oComp.getAggregation("rootControl");
+					this.oRta = new RuntimeAuthoring({
+						rootControl : oRootControl,
+						commandStack : this.oCommandStack,
+						showToolbars : true,
+						flexSettings: {
+							developerMode: false
+						}
+					});
 
-				this.oRta.attachStart(function() {
-					this.oRootControlOverlay = OverlayRegistry.getOverlay(oRootControl);
-					this.oElement2Overlay = OverlayRegistry.getOverlay(oElement2);
-					done();
-				}.bind(this));
-
-				this.oRta.start();
-
+					Promise.all([
+						new Promise(function (fnResolve) {
+							this.oRta.attachStart(function() {
+								this.oRootControlOverlay = OverlayRegistry.getOverlay(oRootControl);
+								this.oElement2Overlay = OverlayRegistry.getOverlay(oElement2);
+								fnResolve();
+							}.bind(this));
+						}.bind(this)),
+						this.oRta.start()
+					]).then(done);
 				}.bind(this));
 
 				this.oCommandStack = new Stack();
@@ -533,14 +580,15 @@ sap.ui.require([
 		afterEach : function(assert) {
 			sandbox.restore();
 			this.oRemoveCommand1.destroy();
-			this.oRta.destroy();
 			this.oCommandStack.destroy();
+			this.oRta.destroy();
 			FakeLrepLocalStorage.deleteChanges();
 		}
 	});
 
 	QUnit.test("when cut is triggered by keydown-event on rootElementOverlay, with macintosh device and metaKey is pushed", function(assert) {
 		var done = assert.async();
+		var bMacintoshOriginal;
 		var fnStackModifiedSpy = sinon.spy(function() {
 			if (fnStackModifiedSpy.calledOnce) {
 				assert.equal(this.oCommandStack.getAllExecutedCommands().length, 0, "after CMD + Z the stack is empty");
@@ -551,7 +599,7 @@ sap.ui.require([
 			}
 		}.bind(this));
 		this.oCommandStack.attachModified(fnStackModifiedSpy);
-		var bMacintoshOriginal = Device.os.macintosh;
+		bMacintoshOriginal = Device.os.macintosh;
 		Device.os.macintosh = true;
 		assert.equal(this.oCommandStack.getAllExecutedCommands().length, 1, "1 commands is still in the stack");
 
@@ -566,6 +614,7 @@ sap.ui.require([
 
 	QUnit.test("when cut is triggered by keydown-event on rootElementOverlay, with no macintosh device and ctrlKey is pushed", function(assert) {
 		var done = assert.async();
+		var bMacintoshOriginal;
 		var fnStackModifiedSpy = sinon.spy(function() {
 			if (fnStackModifiedSpy.calledOnce) {
 				assert.equal(this.oCommandStack.getAllExecutedCommands().length, 0, "after CTRL + Z the stack is empty");
@@ -576,7 +625,7 @@ sap.ui.require([
 			}
 		}.bind(this));
 		this.oCommandStack.attachModified(fnStackModifiedSpy);
-		var bMacintoshOriginal = Device.os.macintosh;
+		bMacintoshOriginal = Device.os.macintosh;
 		Device.os.macintosh = false;
 		assert.equal(this.oCommandStack.getAllExecutedCommands().length, 1, "1 commands is still in the stack");
 
@@ -597,29 +646,20 @@ sap.ui.require([
 	QUnit.test("when _handleElementModified is called if a create container command was executed", function(assert){
 		var done = assert.async();
 
-		// An existing Form is used for the test so we don't need to create a new overlay from scratch
+		// An existing Form is used for the test
 		var oForm = sap.ui.getCore().byId("Comp1---idMain1--MainForm");
-		var oDummyOverlay = OverlayRegistry.getOverlay(oForm.getId());
-		var oDummyCommand = new RTABaseCommand();
-		sandbox.stub(this.oRta.getPlugins()["createContainer"], "getCreatedContainerOverlay").returns(oDummyOverlay);
-		sandbox.stub(this.oRta, "getCommandStack").returns({
-			pushAndExecute : function(oCommand){
-				return Promise.resolve();
-			}
-		});
+		var oFormOverlay = OverlayRegistry.getOverlay(oForm.getId());
 
-		sandbox.stub(this.oRta.getPlugins()["rename"], "startEdit", function(oNewContainerOverlay){
-			assert.equal(oNewContainerOverlay.getId(), oDummyOverlay.getId(), "then the new container starts the edit for rename");
+		sandbox.stub(this.oRta.getPlugins()["rename"], "startEdit", function (oNewContainerOverlay) {
+			sap.ui.getCore().applyChanges();
+			assert.ok(oNewContainerOverlay.isSelected(), "then the new container is selected");
+			assert.ok(true, "then the new container starts the edit for rename");
+			this.oCommandStack.undo();
 			done();
-		});
+		}.bind(this));
 
-		var oEvent = new Event("dummyEvent", oForm, {
-			command : oDummyCommand,
-			action : "dummyDesignTimeAction",
-			newControlId : oForm.getId()
-		});
-
-		this.oRta._handleElementModified(oEvent);
+		this.oRta.getPlugins()["createContainer"].handleCreate(false, oFormOverlay);
+		sap.ui.getCore().applyChanges();
 	});
 
 	QUnit.module("Given that RuntimeAuthoring is available together with a CommandStack with changes...", {
@@ -734,7 +774,7 @@ sap.ui.require([
 			});
 
 			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl"),
+				rootControl : oComp.getAggregation("rootControl"),
 				showToolbars : false,
 				plugins : {
 					remove : this.oRemovePlugin,
@@ -742,7 +782,7 @@ sap.ui.require([
 				}
 			});
 
-			this.fnDestroy = sinon.spy(this.oRta, "_destroyDefaultPlugins");
+			this.fnDestroy = sandbox.spy(this.oRta, "_destroyDefaultPlugins");
 
 			this.oRta.attachStart(function() {
 				done();
@@ -768,488 +808,79 @@ sap.ui.require([
 		assert.equal(this.fnDestroy.callCount, 1, " and _destroyDefaultPlugins have been called 1 time after oRta.start()");
 
 		return this.oRta.stop(false).then(function() {
+			this.oRta.destroy();
 			assert.equal(this.fnDestroy.callCount, 2, " and _destroyDefaultPlugins have been called once again after oRta.stop()");
 			done();
 		}.bind(this));
 	});
 
-	QUnit.module("Given that RuntimeAuthoring is started with different plugin sets...", {
+	QUnit.module("Given that RuntimeAuthoring is started with a scope set...", {
 		beforeEach : function(assert) {
 			var done = assert.async();
 			FakeLrepLocalStorage.deleteChanges();
 
 			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl"),
-				showToolbars : false
+				rootControl : oComp.getAggregation("rootControl"),
+				metadataScope : "someScope"
 			});
-
-			this.fnDestroy = sinon.spy(this.oRta, "_destroyDefaultPlugins");
 
 			this.oRta.attachStart(function() {
 				done();
 			});
-
 			this.oRta.start();
+
 		},
 		afterEach : function(assert) {
 			this.oRta.destroy();
-			FakeLrepLocalStorage.deleteChanges();
 			sandbox.restore();
 		}
 	});
 
-	QUnit.test("when RTA gets initialized without custom plugins and default plugins get used", function(assert) {
-		var done = assert.async();
+	QUnit.test("when RTA is started, then the overlay has the scoped metadata associated", function(assert) {
+		assert.equal(this.oRta.getMetadataScope(), "someScope", "then RTA knows the scope");
+		assert.equal(this.oRta._oDesignTime.getScope(), "someScope", "then designtime knows the scope");
 
-		assert.ok(this.oRta.getPlugins()['contextMenu'], " then the default ContextMenuPlugin is set");
-		assert.notOk(this.oRta.getPlugins()['contextMenu'].bIsDestroyed, " and the default ContextMenuPlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['dragDrop'], " and the default DragDropPlugin is set");
-		assert.notOk(this.oRta.getPlugins()['dragDrop'].bIsDestroyed, " and the default DragDropPlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['cutPaste'], " and the default CutPastePlugin is set");
-		assert.notOk(this.oRta.getPlugins()['cutPaste'].bIsDestroyed, " and the default CutPastePlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['remove'], " and the default RemovePlugin is set");
-		assert.notOk(this.oRta.getPlugins()['remove'].bIsDestroyed, " and the default RemovePlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['additionalElements'], " and the default AdditionalElementsPlugin is set");
-		assert.notOk(this.oRta.getPlugins()['additionalElements'].bIsDestroyed, " and the default AdditionalElementsPlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['rename'], " and the default RenamePlugin is set");
-		assert.notOk(this.oRta.getPlugins()['rename'].bIsDestroyed, " and the default RenamePlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['selection'], " and the default SelectionPlugin is set");
-		assert.notOk(this.oRta.getPlugins()['selection'].bIsDestroyed, " and the default SelectionPlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['settings'], " and the default SettingsPlugin is set");
-		assert.notOk(this.oRta.getPlugins()['settings'].bIsDestroyed, " and the default SettingsPlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['createContainer'], " and the default CreateContainerPlugin is set");
-		assert.notOk(this.oRta.getPlugins()['createContainer'].bIsDestroyed, " and the default CreateContainerPlugin is not destroyed");
-		assert.ok(this.oRta.getPlugins()['tabHandling'], " and the default TabHandlingPlugin is set");
-		assert.notOk(this.oRta.getPlugins()['tabHandling'].bIsDestroyed, " and the default TabHandlingPlugin is not destroyed");
+		var oOverlayWithInstanceSpecificMetadata = OverlayRegistry.getOverlay("Comp1---idMain1--Dates.SpecificFlexibility");
+		var mDesignTimeMetadata = oOverlayWithInstanceSpecificMetadata.getDesignTimeMetadata().getData();
+		assert.equal(mDesignTimeMetadata.newKey, "new", "New scoped key is added");
+		assert.equal(mDesignTimeMetadata.someKeyToOverwriteInScopes, "scoped", "Scope can overwrite keys");
+		assert.equal(mDesignTimeMetadata.some.deep, null, "Scope can delete keys");
 
-		this.oRta.stop(false).then(function(){
-			assert.equal(this.fnDestroy.callCount, 2, " and _destroyDefaultPlugins have been called once again after oRta.stop()");
-			done();
-		}.bind(this));
+		var oRootOverlayWithInstanceSpecificMetadata = OverlayRegistry.getOverlay("Comp1---app");
+		var mDesignTimeMetadata2 = oRootOverlayWithInstanceSpecificMetadata.getDesignTimeMetadata().getData();
+		assert.equal(mDesignTimeMetadata2.newKey, "new", "New scoped key is added");
+		assert.equal(mDesignTimeMetadata2.someKeyToOverwriteInScopes, "scoped", "Scope can overwrite keys");
+		assert.equal(mDesignTimeMetadata2.some.deep, null, "Scope can delete keys");
+
+		var oErrorStub = sandbox.stub(jQuery.sap.log, "error");
+		this.oRta.setMetadataScope("some other scope");
+		assert.equal(this.oRta.getMetadataScope(), "someScope", "then the scope in RTA didn't change");
+		assert.equal(oErrorStub.callCount, 1, "and an error was logged");
 	});
 
-	QUnit.module("Given that RuntimeAuthoring is started with different plugin sets...", {
+	QUnit.module("Given that RuntimeAuthoring is created but not started", {
 		beforeEach : function(assert) {
-			var done = assert.async();
-			FakeLrepLocalStorage.deleteChanges();
-
-			this.oContextMenuPlugin = new ContextMenu("nonDefaultContextMenu");
-
+			this.oRootControl = oCompCont.getComponentInstance().getAggregation("rootControl");
 			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl"),
-				showToolbars : false
-			});
-			this.fnDestroy = sinon.spy(this.oRta, "_destroyDefaultPlugins");
-			var mPlugins = this.oRta.getDefaultPlugins();
-
-			assert.ok(mPlugins, " then default plugins are supplied by getDefaultPlugins methode");
-			delete mPlugins['rename'];
-			mPlugins['contextMenu'] = this.oContextMenuPlugin;
-			this.oRta.setPlugins(mPlugins);
-
-			this.oRta.attachStart(function() {
-				assert.throws(function () {
-					this.oRta.setPlugins(mPlugins);
-				}, /Cannot replace plugins/, " and setPlugins cannot be called after DT start");
-				assert.equal(this.oRta.getPlugins()['rename'], undefined, " and a custom rename plugin does not exist");
-				assert.ok(this.oRta.getDefaultPlugins()['rename'].bIsDestroyed, " and the default rename plugin has been destroyed");
-				assert.ok(this.oRta.getDefaultPlugins()['contextMenu'].bIsDestroyed, " and the default context menu plugin has been destroyed");
-				assert.equal(this.oRta.getPlugins()['contextMenu'].getId(), this.oContextMenuPlugin.getId(), " and the custom context menu plugin is used");
-				done();
-			}.bind(this));
-
-			this.oRta.start();
-		},
-		afterEach : function(assert) {
-			this.oContextMenuPlugin.destroy();
-			FakeLrepLocalStorage.deleteChanges();
-			this.oRta.destroy();
-		}
-	});
-
-	QUnit.test("when RTA gets initialized without custom plugins but set plugins with setPlugins method", function (assert) {
-		var done = assert.async();
-
-		this.oRta.attachStop(function(oEvent) {
-			assert.equal(this.fnDestroy.callCount, 2, " and _destroyDefaultPlugins have been called once again after oRta.stop()");
-			done();
-		}.bind(this));
-
-		this.oRta.stop(false);
-	});
-
-	QUnit.module("Given that RTA is started in FLP", {
-		beforeEach : function(assert) {
-			window.bUShellNavigationTriggered = false;
-
-			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl"),
-				showToolbars : false
-			});
-
-			this.fnEnableRestartSpy = sandbox.spy(RuntimeAuthoring, "enableRestart");
-
-			this.originalUShell = sap.ushell;
-			// this overrides the ushell globally => we need to restore it!
-
-			sap.ushell = jQuery.extend(sap.ushell, {
-				Container : {
-					getService : function(sServiceName) {
-						return {
-							toExternal : function() {
-								window.bUShellNavigationTriggered = true;
-							},
-							getHash : function() {
-								return "Action-somestring";
-							},
-							parseShellHash : function() {
-								return {
-									semanticObject : "Action",
-									action : "somestring"
-								};
-							}
-						};
-					},
-					setDirtyFlag : function() {
-						return "";
-					}
+				rootControl : this.oRootControl,
+				showToolbars : false,
+				flexSettings: {
+					layer: "CUSTOMER"
 				}
 			});
-		},
-		afterEach : function(assert) {
-			this.oRta.destroy();
-			sap.ushell = this.originalUShell;
-			sandbox.restore();
-			delete window.bUShellNavigationTriggered;
-		}
-	});
-
-	QUnit.test("when there are personalized changes and when _handlePersonalizationChangesOnStart() method is called", function(assert) {
-		var stubFlexController = {
-			isPersonalized : function(){
-				return Promise.resolve(true);
-			}
-		};
-
-		sandbox.stub(this.oRta, "_getFlexController").returns(stubFlexController);
-
-		this.fnStubMessageBox = sandbox.stub(sap.m.MessageBox,
-			"show",
-			function(sMessage, mOptions){
-				mOptions.onClose.call(this);
-			}
-		);
-
-		return this.oRta._handlePersonalizationChangesOnStart().then(function(){
-			assert.strictEqual(this.fnEnableRestartSpy.calledOnce,
-				true,
-				"then enableRestart() is called only once");
-			assert.equal(this.fnEnableRestartSpy.calledWith("CUSTOMER"),
-				true,
-				"then enableRestart() is called with the correct parameter");
-			assert.strictEqual(window.bUShellNavigationTriggered,
-				true,
-				"then the reload inside FLP is triggered");
-		}.bind(this));
-	});
-
-	QUnit.test("when no personalized changes and _handlePersonalizationChangesOnStart() is called", function(assert) {
-		var stubFlexController = {
-			isPersonalized : function(){
-				return Promise.resolve(false);
-			}
-		};
-
-		sandbox.stub(this.oRta, "_getFlexController").returns(stubFlexController);
-
-		return this.oRta._handlePersonalizationChangesOnStart().then(function(){
-			assert.strictEqual(this.fnEnableRestartSpy.callCount,
-				0,
-				"then enableRestart() is not called");
-			assert.strictEqual(window.bUShellNavigationTriggered,
-				false,
-				"then the reload inside FLP is not triggered");
-		}.bind(this));
-	});
-
-	QUnit.test("when the appClosed event is raised", function(assert) {
-		var done = assert.async();
-
-		var oCheckPersChangesSpy = sandbox.spy(this.oRta, "_handlePersonalizationChangesOnExit");
-		var oSerializeSpy = sandbox.spy(this.oRta, "_serializeToLrep");
-
-		this.oRta.attachStop(function() {
-			assert.equal(oCheckPersChangesSpy.callCount, 0, "then the check for personalized changes wasn't executed");
-			assert.equal(oSerializeSpy.callCount, 0, "then _serializeToLrep wasn't called");
-			done();
-		});
-
-		this.oRta.attachStart(function() {
-			sap.ui.getCore().getEventBus().publish("sap.ushell.renderers.fiori2.Renderer", "appClosed", this);
-		});
-		this.oRta.start();
-	});
-
-	QUnit.test("when RTA toolbar gets closed (exit without appClosed)", function(assert) {
-		var done = assert.async();
-
-		sandbox.stub(this.oRta, "_handlePersonalizationChangesOnExit", function(){
-			//The test will timeout if the Personalization handling is not called
-			assert.ok("then the check for personalized changes was executed");
-			done();
-		});
-
-		var stubFlexController = {
-			isPersonalized : function(){
-				return Promise.resolve(false);
-			}
-		};
-
-		sandbox.stub(this.oRta, "_getFlexController").returns(stubFlexController);
-		sandbox.stub(this.oRta, "_checkChangesExist", function() {
-			return Promise.resolve(true);
-		});
-		this.oRta.setShowToolbars(true);
-
-		this.oRta.start().then(function () {
-			this.oRta._oToolsMenu.getControl('exit').firePress();
-		}.bind(this));
-	});
-
-	QUnit.module("Given that RTA is started in FLP with sap-ui-fl-max-layer = CUSTOMER already in the URL", {
-		beforeEach : function(assert) {
-			window.bUShellNavigationTriggered = false;
-			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl"),
-				showToolbars : false
-			});
-
-			this.fnEnableRestartSpy = sandbox.spy(RuntimeAuthoring, "enableRestart");
-
-			this.originalUShell = sap.ushell;
-			// this overrides the ushell globally => we need to restore it!
-			sap.ushell = jQuery.extend(sap.ushell, {
-				Container : {
-					getService : function(sServiceName) {
-						return {
-							toExternal : function() {
-								window.bUShellNavigationTriggered = true;
-							},
-							getHash : function() {
-								return "Action-somestring";
-							},
-							parseShellHash : function() {
-								return {
-									semanticObject : "Action",
-									action : "somestring",
-									params : {
-									"sap-ui-fl-max-layer" : ["CUSTOMER"]
-									}
-								};
-							}
-						};
-					},
-					setDirtyFlag : function() {
-						return "";
-					}
-				}
-			});
-		},
-		afterEach : function(assert) {
-			this.oRta.exit();
-			sap.ushell = this.originalUShell;
-			sandbox.restore();
-		}
-	});
-
-	QUnit.test("when _handlePersonalizationChangesOnStart() method is called", function(assert) {
-		var stubFlexController = {
-			isPersonalized : function(){
-				return Promise.resolve(true);
-			}
-		};
-
-		sandbox.stub(this.oRta, "_getFlexController").returns(stubFlexController);
-
-		this.fnStubMessageBox = sandbox.stub(sap.m.MessageBox,
-			"show",
-			function(sMessage, mOptions){
-				mOptions.onClose.call(this);
-			}
-		);
-
-		return this.oRta._handlePersonalizationChangesOnStart().then(function(){
-			assert.strictEqual(this.fnEnableRestartSpy.calledOnce,
-				false,
-				"then enableRestart() is not called");
-			assert.strictEqual(window.bUShellNavigationTriggered,
-				false,
-				"then the reload inside FLP is not triggered");
-		}.bind(this));
-	});
-
-	QUnit.test("when personalized changes exist and user exits reloading the personalization...", function(assert) {
-		var stubFlexController = {
-			isPersonalized : function(){
-				return Promise.resolve(true);
-			}
-		};
-
-		sandbox.stub(this.oRta, "_getFlexController").returns(stubFlexController);
-
-		var sMessageBoxConfirmText = this.oRta._getTextResources().getText("MSG_PERSONALIZATION_CONFIRM_BUTTON_TEXT");
-
-		this.fnStubMessageBox = sandbox.stub(sap.m.MessageBox,
-			"confirm",
-			function(sMessage, mOptions){
-				mOptions.onClose.call(this, sMessageBoxConfirmText);
-			}
-		);
-
-		return this.oRta._handlePersonalizationChangesOnExit().then(function(){
-			assert.strictEqual(this.fnEnableRestartSpy.callCount,
-				0,
-				"then enableRestart() is not called");
-			assert.strictEqual(window.bUShellNavigationTriggered,
-				true,
-				"then the reload inside FLP is triggered");
-		}.bind(this));
-	});
-
-	QUnit.test("when personalized changes exist and user exits without personalization...", function(assert) {
-		var stubFlexController = {
-			isPersonalized : function(){
-				return Promise.resolve(true);
-			}
-		};
-
-		sandbox.stub(this.oRta, "_getFlexController").returns(stubFlexController);
-
-		var sMessageBoxCancelText = this.oRta._getTextResources().getText("MSG_PERSONALIZATION_CANCEL_BUTTON_TEXT");
-
-		this.fnStubMessageBox = sandbox.stub(sap.m.MessageBox,
-			"confirm",
-			function(sMessage, mOptions){
-				mOptions.onClose.call(this, sMessageBoxCancelText);
-			}
-		);
-
-		return this.oRta._handlePersonalizationChangesOnExit().then(function(){
-			assert.strictEqual(this.fnEnableRestartSpy.callCount,
-				0,
-				"then enableRestart() is not called");
-			assert.strictEqual(window.bUShellNavigationTriggered,
-				false,
-				"then the reload inside FLP is not triggered");
-		}.bind(this));
-	});
-
-	QUnit.test("when there are no personalized changes and _handlePersonalizationChangesOnExit() is called", function(assert) {
-		var stubFlexController = {
-			isPersonalized : function(){
-				return Promise.resolve(false);
-			}
-		};
-
-		sandbox.stub(this.oRta, "_getFlexController").returns(stubFlexController);
-
-		return this.oRta._handlePersonalizationChangesOnExit().then(function(){
-			assert.strictEqual(this.fnEnableRestartSpy.callCount,
-				0,
-				"then enableRestart() is not called");
-			assert.strictEqual(window.bUShellNavigationTriggered,
-				false,
-				"then the reload inside FLP is not triggered");
-		}.bind(this));
-	});
-
-	QUnit.module("Given that RTA is started on stand-alone applications", {
-		beforeEach : function(assert) {
-			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl"),
-				showToolbars : false
-			});
-
-			this.fnEnableRestartSpy = sandbox.spy(RuntimeAuthoring, "enableRestart");
-			this.fnReloadWithPersonalizationChangesSpy =
-				sandbox.spy(this.oRta, "_reloadWithPersonalizationChanges");
-			this.fnReloadWithoutPersonalizationChangesSpy =
-				sandbox.spy(this.oRta, "_reloadWithoutPersonalizationChanges");
-		},
-		afterEach : function(assert) {
-			this.oRta.exit();
-			sandbox.restore();
-		}
-	});
-
-	QUnit.test("when the _handlePersonalizationChangesOnStart() method is called", function(assert) {
-		return this.oRta._handlePersonalizationChangesOnStart().then(function(){
-			assert.strictEqual(this.fnEnableRestartSpy.callCount, 0, "then enableRestart() is not called");
-			assert.strictEqual(this.fnReloadWithPersonalizationChangesSpy.callCount,
-				0,
-				"then reloadWithoutPersonalizationChanges() is not called");
-		}.bind(this));
-	});
-
-	QUnit.test("when the _handlePersonalizationChangesOnExit() method is called", function(assert) {
-		return this.oRta._handlePersonalizationChangesOnExit().then(function(){
-			assert.strictEqual(this.fnEnableRestartSpy.callCount, 0, "then enableRestart() is not called");
-			assert.strictEqual(this.fnReloadWithoutPersonalizationChangesSpy.callCount,
-				0,
-				"then reloadWithPersonalizationChanges() is not called");
-		}.bind(this));
-	});
-
-	QUnit.module("Given that RuntimeAuthoring is available with a view as rootControl ...", {
-		beforeEach : function(assert) {
-			var that = this;
-			var done = assert.async();
-			sandbox = sinon.sandbox.create();
-			var oSettings = {
-				isAtoAvailable: false,
-				isKeyUser: true,
-				isProductiveSystem: true
+			sandbox.stub(BusyIndicator, "show");
+			this.oChangePersistence = {
+				transportAllUIChanges: function() {}
 			};
-			var oSettingsInstance = new Settings(oSettings);
-			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl")
-			});
-			sap.ui.require(["sap/ui/fl/registry/Settings"], function(Settings) {
-				sandbox.stub(Settings, "getInstance").returns(Promise.resolve(oSettingsInstance));
-
-				that.oRta.start().then(done);
-			});
-		},
-		afterEach : function(assert) {
-			this.oRta.destroy();
-			sandbox.restore();
-		}
-	});
-
-	QUnit.test("and publish is disabled", function(assert) {
-		assert.equal(this.oRta._oToolsMenu.getControl('restore').getVisible(), true, "then the Reset Button is still visible");
-		assert.equal(this.oRta._oToolsMenu.getControl('publish').getVisible(), false, "then the Publish Button is invisible");
-	});
-
-	QUnit.module("Given that RuntimeAuthoring is available with a view as rootControl...", {
-		beforeEach : function(assert) {
-			var that = this;
-			var done = assert.async();
-			sandbox = sinon.sandbox.create();
-			var oSettings = {
-				isAtoAvailable: true,
-				isKeyUser: true,
-				isProductiveSystem: false
+			this.oFlexController = {
+				_oChangePersistence: this.oChangePersistence,
+				resetChanges: function() {}
 			};
-			var oSettingsInstance = new Settings(oSettings);
-			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl")
-			});
-			sap.ui.require(["sap/ui/fl/registry/Settings"], function(Settings) {
-				sandbox.stub(Settings, "getInstance").returns(Promise.resolve(oSettingsInstance));
-
-				that.oRta.start().then(done);
-			});
+			this.oFlexControllerStub = sandbox.stub(this.oRta, "_getFlexController").returns(this.oFlexController);
+			sandbox.stub(this.oRta, "_serializeToLrep").returns(Promise.resolve());
+			this.oDeleteChangesStub = sandbox.stub(this.oRta, "_deleteChanges");
+			this.oEnableRestartSpy = sandbox.spy(RuntimeAuthoring, "enableRestart");
+			this.oReloadPageStub = sandbox.stub(this.oRta, "_reloadPage");
 		},
 		afterEach : function(assert) {
 			this.oRta.destroy();
@@ -1257,89 +888,114 @@ sap.ui.require([
 		}
 	});
 
-	QUnit.test("and publish is enabled", function(assert) {
-		assert.equal(this.oRta._oToolsMenu.getControl('restore').getVisible(), true, "then the Reset Button is visible");
-		assert.equal(this.oRta._oToolsMenu.getControl('publish').getVisible(), true, "then the Publish Button is visible");
+	QUnit.test("When transport function is called and transportAllUIChanges returns Promise.resolve()", function(assert) {
+		var oChangePersistenceStub = sandbox.stub(this.oChangePersistence, "transportAllUIChanges").returns(Promise.resolve());
+		var oMessageToastStub = sandbox.stub(this.oRta, "_showMessageToast");
+		return this.oRta.transport().then(function() {
+			assert.equal(oMessageToastStub.callCount, 1, "then the messageToast was shown");
+			assert.equal(oChangePersistenceStub.firstCall.args[1], RtaUtils.getRtaStyleClassName(), "the styleClass was passed correctly");
+			assert.equal(oChangePersistenceStub.firstCall.args[2], "CUSTOMER", "the layer was passed correctly");
+		});
 	});
 
-	QUnit.module("Given that RuntimeAuthoring is available with a view as rootControl...", {
-		beforeEach : function(assert) {
-			var that = this;
-			var done = assert.async();
-			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl")
-			});
-			sap.ui.require(["sap/ui/fl/registry/Settings"], function(Settings) {
-				sandbox.stub(Settings, "getInstance").returns(Promise.reject());
-
-				that.oRta.start().then(done);
-			});
-		},
-		afterEach : function(assert) {
-			this.oRta.destroy();
-			sandbox.restore();
-		}
+	QUnit.test("When transport function is called and transportAllUIChanges returns Promise.reject()", function(assert) {
+		sandbox.stub(this.oChangePersistence, "transportAllUIChanges").returns(Promise.reject(new Error("Error")));
+		var oMessageToastStub = sandbox.stub(this.oRta, "_showMessageToast");
+		var oShowErrorStub = sandbox.stub(jQuery.sap.log, "error");
+		var oErrorBoxStub = sandbox.stub(MessageBox, "error");
+		return this.oRta.transport().then(function() {
+			assert.equal(oMessageToastStub.callCount, 0, "then the messageToast was not shown");
+			assert.equal(oShowErrorStub.callCount, 1, "then the error was logged");
+			assert.equal(oErrorBoxStub.callCount, 1, "and a MessageBox.error was shown");
+		});
 	});
 
-	QUnit.test("and FL settings return rejected promise", function(assert) {
-		assert.equal(this.oRta._oToolsMenu.getControl('restore').getVisible(), true, "then the Reset Button is still visible");
-		assert.equal(this.oRta._oToolsMenu.getControl('publish').getVisible(), false, "then the Publish Button is invisible");
+	QUnit.test("When transport function is called and transportAllUIChanges returns Promise.resolve() with 'Error' as parameter", function(assert) {
+		sandbox.stub(this.oChangePersistence, "transportAllUIChanges").returns(Promise.resolve('Error'));
+		var oMessageToastStub = sandbox.stub(this.oRta, "_showMessageToast");
+		return this.oRta.transport().then(function() {
+			assert.equal(oMessageToastStub.callCount, 0, "then the messageToast was not shown");
+		});
 	});
 
-	QUnit.module("Given that changeSpecificData is given with changes for two controls...", {
-		beforeEach : function(assert) {
-			this.oRta = new RuntimeAuthoring({
-				rootControl : oCompCont.getComponentInstance().getAggregation("rootControl")
-			});
-
-			this.oFlexController = this.oRta._getFlexController();
-			this.aChangeSpecificData = [
-				{ selector : { id : "Comp1---idMain1--GeneralLedgerDocument.Name" } },
-				{ selector : { id : "Comp1---idMain1--GeneralLedgerDocument.CompanyCode" } }
-			];
-			this.oCheckTargetAndApplyChangeStub = sandbox.stub(this.oFlexController, "createAndApplyChange");
-			this.oSaveAllStub = sandbox.stub(this.oFlexController, "saveAll");
-			this.oUtilsLogStub = sandbox.stub(Utils.log, "error");
-			this.oShowMessageStub = sandbox.stub(this.oRta, "_showMessage").returns(Promise.resolve());
-		},
-		afterEach : function(assert) {
-			sandbox.restore();
-		}
+	QUnit.test("When transport function is called and transportAllUIChanges returns Promise.resolve() with 'Cancel' as parameter", function(assert) {
+		sandbox.stub(this.oChangePersistence, "transportAllUIChanges").returns(Promise.resolve('Cancel'));
+		var oMessageToastStub = sandbox.stub(this.oRta, "_showMessageToast");
+		return this.oRta.transport().then(function() {
+			assert.equal(oMessageToastStub.callCount, 0, "then the messageToast was not shown");
+		});
 	});
 
-	QUnit.test("when _createAndApplyChanges function is called and all promises are resolved", function(assert) {
+	QUnit.test("When restore function is called in the CUSTOMER layer", function(assert) {
 		var done = assert.async();
-		this.oCheckTargetAndApplyChangeStub.returns(Promise.resolve());
-		this.oSaveAllStub.returns(Promise.resolve());
+		sandbox.stub(MessageBox, "confirm", function(sMessage, mParameters) {
+			assert.equal(sMessage, this.oRta._getTextResources().getText("FORM_PERS_RESET_MESSAGE"), "then the message is correct");
+			assert.equal(mParameters.title, this.oRta._getTextResources().getText("FORM_PERS_RESET_TITLE"), "then the message is correct");
 
-		var oPromiseReturn = this.oRta._createAndApplyChanges(this.aChangeSpecificData);
+			mParameters.onClose("OK");
+			assert.equal(this.oDeleteChangesStub.callCount, 1, "then _deleteChanges was called");
+			assert.equal(this.oEnableRestartSpy.callCount, 1, "then restart was enabled...");
+			assert.equal(this.oEnableRestartSpy.lastCall.args[0], "CUSTOMER", "for the correct layer");
 
-		assert.ok(oPromiseReturn instanceof Promise, "then promise is returned");
-
-		oPromiseReturn.then(function() {
-			assert.strictEqual(this.oCheckTargetAndApplyChangeStub.callCount, 2, "then both changes are processed");
-			assert.strictEqual(this.oUtilsLogStub.callCount, 0, "then no errors occurred");
-			assert.ok(this.oSaveAllStub.calledOnce, "then process was finished");
+			mParameters.onClose("notOK");
+			assert.equal(this.oDeleteChangesStub.callCount, 1, "then _deleteChanges was not called again");
+			assert.equal(this.oEnableRestartSpy.callCount, 1, "then restart was not  enabled again");
 			done();
+		}.bind(this));
+
+		this.oRta.restore();
+	});
+
+	QUnit.test("When restore function is called in the USER layer", function(assert) {
+		var done = assert.async();
+		this.oRta.setFlexSettings({
+			layer: "USER"
+		});
+		sandbox.stub(MessageBox, "confirm", function(sMessage, mParameters) {
+			assert.equal(sMessage, this.oRta._getTextResources().getText("FORM_PERS_RESET_MESSAGE_PERSONALIZATION"), "then the message is correct");
+			assert.equal(mParameters.title, this.oRta._getTextResources().getText("BTN_RESTORE"), "then the message is correct");
+
+			mParameters.onClose("OK");
+			assert.equal(this.oDeleteChangesStub.callCount, 1, "then _deleteChanges was called");
+			assert.equal(this.oEnableRestartSpy.callCount, 1, "then restart was enabled...");
+			assert.equal(this.oEnableRestartSpy.lastCall.args[0], "USER", "for the correct layer");
+
+			mParameters.onClose("notOK");
+			assert.equal(this.oDeleteChangesStub.callCount, 1, "then _deleteChanges was not called again");
+			assert.equal(this.oEnableRestartSpy.callCount, 1, "then restart was not  enabled again");
+			done();
+		}.bind(this));
+
+		this.oRta.restore();
+	});
+
+	QUnit.test("when calling '_deleteChanges' successfully, ", function(assert) {
+		this.oDeleteChangesStub.restore();
+		sandbox.stub(this.oFlexController, "resetChanges", function() {
+			assert.strictEqual(arguments[0], this.oRta.getLayer(), "then correct layer parameter passed");
+			assert.strictEqual(arguments[1], "Change.createInitialFileContent", "then correct generator parameter passed");
+			assert.deepEqual(arguments[2], Utils.getAppComponentForControl(this.oRootControl), "then correct component parameter passed");
+			return Promise.resolve();
+		}.bind(this));
+
+		return this.oRta._deleteChanges().then(function() {
+			assert.ok(this.oReloadPageStub.callCount, 1, "then page reload is triggered");
 		}.bind(this));
 	});
 
-	QUnit.test("when _createAndApplyChanges function is called with rejected promises", function(assert) {
-		var done = assert.async();
-		this.oCheckTargetAndApplyChangeStub.onCall(0).returns(Promise.resolve());
-		this.oCheckTargetAndApplyChangeStub.onCall(1).returns(Promise.reject());
-		this.oSaveAllStub.returns(Promise.reject());
+	QUnit.test("when calling '_deleteChanges and there is an error', ", function(assert){
+		this.oDeleteChangesStub.restore();
 
-		var oPromiseReturn = this.oRta._createAndApplyChanges(this.aChangeSpecificData);
+		sandbox.stub(this.oFlexController, "resetChanges", function() {
+			return Promise.reject("Error");
+		});
 
-		assert.ok(oPromiseReturn instanceof Promise, "then promise is returned");
+		sandbox.stub(RtaUtils, "_showMessageBox", function(sIconType, sHeader, sMessage, sError){
+			assert.equal(sError, "Error", "and a message box shows the error to the user");
+		});
 
-		oPromiseReturn.then(function() {
-			assert.strictEqual(this.oCheckTargetAndApplyChangeStub.callCount, 2, "then both changes are processed");
-			assert.strictEqual(this.oUtilsLogStub.callCount, 2, "then rejected errors are handled");
-			assert.ok(this.oSaveAllStub.calledOnce, "then process was finished");
-			assert.ok(this.oShowMessageStub.calledOnce, "then save error MessageToast called");
-			done();
+		return this.oRta._deleteChanges().then(function() {
+			assert.equal(this.oReloadPageStub.callCount, 0, "then page reload is not triggered");
 		}.bind(this));
 	});
 

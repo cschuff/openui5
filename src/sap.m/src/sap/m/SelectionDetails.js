@@ -2,8 +2,26 @@
  * ${copyright}
  */
 // Provides control sap.m.SelectionDetails.
-sap.ui.define([ 'jquery.sap.global', './library', 'sap/ui/core/Control', 'sap/m/Button', 'sap/ui/base/Interface', 'sap/ui/Device', 'sap/ui/core/library' ],
-	function(jQuery, library, Control, Button, Interface, Device, CoreLibrary) {
+sap.ui.define([
+	'jquery.sap.global',
+	'./library',
+	'sap/ui/core/Control',
+	'sap/m/Button',
+	'sap/ui/base/Interface',
+	'sap/ui/Device',
+	'sap/ui/core/library',
+	'./SelectionDetailsRenderer'
+],
+function(
+	jQuery,
+	library,
+	Control,
+	Button,
+	Interface,
+	Device,
+	CoreLibrary,
+	SelectionDetailsRenderer
+	) {
 	"use strict";
 
 	/**
@@ -84,7 +102,7 @@ sap.ui.define([ 'jquery.sap.global', './library', 'sap/ui/core/Control', 'sap/m/
 					 */
 					direction: {type: "string"},
 					/**
-					 * The content of the currently viewed page that was previously added via {@link sap.m.SelectionDetails#navTo}.
+					 * The content of the currently viewed page that was previously added via {@link sap.m.SelectionDetailsFacade#navTo}.
 					 * This contains the content of the page before the navigation was triggered.
 					 * Can be null in case of first event triggering.
 					 */
@@ -511,7 +529,7 @@ sap.ui.define([ 'jquery.sap.global', './library', 'sap/ui/core/Control', 'sap/m/
 		});
 		this.destroyAggregation("items", true);
 		for (var i = 0; i < aSelection.length; i++) {
-			oResult = fnFactory(aSelection[i].displayData, aSelection[i].data, aSelection[i].context, oData);
+			oResult = fnFactory(aSelection[i].displayData, aSelection[i].data, aSelection[i].context, oData, aSelection[i].shapeString);
 			if (oResult) {
 				oResult._sMarkerShapeString = aSelection[i].shapeString;
 				this.addAggregation("items", oResult, true);

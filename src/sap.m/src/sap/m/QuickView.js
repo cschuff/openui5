@@ -4,12 +4,29 @@
 
 // Provides control sap.m.QuickView.
 sap.ui.define([
-	'jquery.sap.global', './library', 'sap/ui/core/Control', 'sap/ui/core/IconPool',
-		'./QuickViewBase', './ResponsivePopover', './NavContainer',
-		'./Page', './Bar', './Button'],
-	function(jQuery, library, Control, IconPool,
-			QuickViewBase, ResponsivePopover, NavContainer,
-			Page, Bar, Button) {
+	'./library',
+	'sap/ui/Device',
+	'sap/ui/core/IconPool',
+	'./QuickViewBase',
+	'./ResponsivePopover',
+	'./NavContainer',
+	'./Page',
+	'./Bar',
+	'./Button',
+	'./QuickViewRenderer'
+],
+	function(
+	library,
+	Device,
+	IconPool,
+	QuickViewBase,
+	ResponsivePopover,
+	NavContainer,
+	Page,
+	Bar,
+	Button,
+	QuickViewRenderer
+	) {
 	"use strict";
 
 	// shortcut for sap.m.PlacementType
@@ -49,6 +66,7 @@ sap.ui.define([
 	 * @public
 	 * @since 1.28.11
 	 * @alias sap.m.QuickView
+	 * @see {@link fiori:https://experience.sap.com/fiori-design-web/quickview/ Quick View}
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	var QuickView = QuickViewBase.extend("sap.m.QuickView", /** @lends sap.m.QuickView.prototype */	{
@@ -75,6 +93,7 @@ sap.ui.define([
 					},
 					aggregations: {
 					},
+					designtime: "sap/m/designtime/QuickView.designtime",
 					events: {
 						/**
 						 * This event fires after the QuickView is opened.
@@ -205,7 +224,7 @@ sap.ui.define([
 
 		var oPopupControl = this._oPopover.getAggregation("_popup");
 		oPopupControl.addEventDelegate({
-			onBeforeRendering: this.onBeforeRenderingPopover,
+			onBeforeRendering: this._initializeQuickView,
 			onAfterRendering: this._setLinkWidth,
 			onkeydown: this._onPopupKeyDown
 		}, this);
@@ -226,7 +245,11 @@ sap.ui.define([
 		this._oPopover.addStyleClass("sapMQuickView");
 	};
 
-	QuickView.prototype.onBeforeRenderingPopover = function() {
+	/**
+	 * Initialize the QuickView.
+	 * @private
+	 */
+	QuickView.prototype._initializeQuickView = function() {
 
 		this._bRendered = true;
 
@@ -237,7 +260,7 @@ sap.ui.define([
 
 			// add a close button on phone devices when there are no pages
 			var aPages = this.getAggregation("pages");
-			if (!aPages && sap.ui.Device.system.phone) {
+			if (!aPages && Device.system.phone) {
 				this._addEmptyPage();
 			}
 
@@ -254,6 +277,14 @@ sap.ui.define([
 			this._oPopover.destroy();
 			this._oPopover = null;
 		}
+	};
+
+	/**
+	 * Invalidates the control.
+	 */
+	QuickView.prototype.invalidate = function() {
+		// nothing this control should do here
+		// changes are handled manually
 	};
 
 	/**
@@ -280,7 +311,7 @@ sap.ui.define([
 	 * @private
 	 */
 	QuickView.prototype._afterOpen = function(oEvent) {
-		if (sap.ui.Device.system.phone) {
+		if (Device.system.phone) {
 			this._restoreFocus();
 		}
 	};
@@ -347,7 +378,7 @@ sap.ui.define([
 	 * @private
 	 */
 	QuickView.prototype.getCloseButton = function() {
-		if (!sap.ui.Device.system.phone) {
+		if (!Device.system.phone) {
 			return undefined;
 		}
 
@@ -420,7 +451,16 @@ sap.ui.define([
 		"removeAggregation", "removeAllAggregation", "destroyAggregation"].forEach(function (sFuncName) {
 			QuickView.prototype["_" + sFuncName + "Old"] = QuickView.prototype[sFuncName];
 			QuickView.prototype[sFuncName] = function () {
-				var result = QuickView.prototype["_" + sFuncName + "Old"].apply(this, arguments);
+				var newArgs,
+					result;
+
+				if (["removeAggregation", "removeAllAggregation", "destroyAggregation"].indexOf(sFuncName) !== -1) {
+					newArgs = [arguments[0], true];
+				} else {
+					newArgs = [arguments[0], arguments[1], true];
+				}
+
+				result = QuickView.prototype["_" + sFuncName + "Old"].apply(this, newArgs);
 
 				// Marks items aggregation as changed and invalidate popover to trigger rendering
 				this._bItemsChanged = true;
@@ -431,7 +471,7 @@ sap.ui.define([
 					}
 
 					if (this._bRendered) {
-						this._oPopover.invalidate();
+						this._initializeQuickView();
 					}
 				}
 
@@ -445,4 +485,4 @@ sap.ui.define([
 
 	return QuickView;
 
-}, /* bExport= */true);
+});

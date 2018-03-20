@@ -4,7 +4,6 @@
 /* ==============================================*/
 
 .sapMSegB {
-	height: 2.5rem;
 	vertical-align: top;
 	position: relative;
 	.sapMSegBBtn {
@@ -38,11 +37,6 @@
 	border-bottom-right-radius: 0.2rem;
 }
 
-// Adding margin to be displayed correct in sap.m.Bar
-.sapMBar .sapMSegB {
-	margin: 0.250rem 0;
-}
-
 html.sap-desktop .sapMSegBBtnFocusable:hover {
 	background: @sapUiSegmentedButtonHoverBackground;
 }
@@ -69,6 +63,7 @@ html.sap-desktop {
 html[data-sap-ui-browser^="ie"].sap-desktop .sapMSegBBtnFocusable.sapMSegBBtnSel:focus,
 html[data-sap-ui-browser^="ed"].sap-desktop .sapMSegBBtnFocusable.sapMSegBBtnSel:focus {
 		outline-color: @sapUiContentFocusColor;
+		outline-style: dashed;
 }
 
 .sapMSegB.sapMSegBIcons {
@@ -129,10 +124,6 @@ html.sap-desktop .sapMSegBBtnFocusable.sapMBtnActive:hover {
 
 /* Compact size */
 .sapUiSizeCompact {
-	.sapMSegB {
-		height: 1.625rem;
-	}
-
 	.sapMSegBBtn {
 		height: 1.625rem;
 		line-height: 1.5rem;

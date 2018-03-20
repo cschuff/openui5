@@ -3,8 +3,27 @@
  */
 
 // Provides control sap.m.MultiInput.
-sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './library', 'sap/ui/core/EnabledPropagator', 'sap/ui/Device', 'sap/ui/core/InvisibleText'],
-	function (jQuery, Input, Tokenizer, Token, library, EnabledPropagator, Device, InvisibleText) {
+sap.ui.define([
+	'jquery.sap.global',
+	'./Input',
+	'./Tokenizer',
+	'./Token',
+	'./library',
+	'sap/ui/core/EnabledPropagator',
+	'sap/ui/Device',
+	'./MultiInputRenderer',
+	'jquery.sap.keycodes'
+],
+function(
+	jQuery,
+	Input,
+	Tokenizer,
+	Token,
+	library,
+	EnabledPropagator,
+	Device,
+	MultiInputRenderer
+	) {
 		"use strict";
 
 
@@ -64,12 +83,14 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 	* @constructor
 	* @public
 	* @alias sap.m.MultiInput
+	* @see {@link fiori:https://experience.sap.com/fiori-design-web/multiinput/ Multi-Input Field}
 	* @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	*/
 	var MultiInput = Input.extend("sap.m.MultiInput", /** @lends sap.m.MultiInput.prototype */ {
 		metadata: {
 
 			library: "sap.m",
+			designtime: "sap/m/designtime/MultiInput.designtime",
 			properties: {
 
 				/**
@@ -98,12 +119,7 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 				/**
 				 * The tokenizer which displays the tokens
 				 */
-				tokenizer: {type: "sap.m.Tokenizer", multiple: false, visibility: "hidden"},
-
-				/**
-				 * Hidden text used for accesibility
-				 */
-				_tokensInfo: {type: "sap.ui.core.InvisibleText", multiple: false, visibility: "hidden"}
+				tokenizer: {type: "sap.m.Tokenizer", multiple: false, visibility: "hidden"}
 			},
 			events: {
 
@@ -149,7 +165,7 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 				},
 
 				/**
-				 * Fired when the tokens aggregation changed (add / remove token)
+				 * Fired when the tokens aggregation changed due to a user interaction (add / remove token)
 				 */
 				tokenUpdate: {
 					allowPreventDefault : true,
@@ -202,14 +218,10 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 
 		this.attachLiveChange(this._onLiveChange, this);
 
-		if (sap.ui.getCore().getConfiguration().getAccessibility()) {
-			// create an ARIA announcement and remember its ID for later use in the renderer:
-			var sAriaMultiInputContainToken = new InvisibleText({
-				text: oRb.getText("MULTIINPUT_ARIA_CONTAIN_TOKEN")
-			});
-
-			this.setAggregation("_tokensInfo", sAriaMultiInputContainToken);
-		}
+		this.attachValueHelpRequest(function () {
+			// Register the click on value help.
+			this._bValueHelpOpen = true;
+		}, this);
 	};
 
 	MultiInput.prototype._onTokenChange = function (args) {
@@ -259,7 +271,8 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 			that = this,
 			iOldLength = this._tokenizer.getTokens().length; //length of tokens before validating
 
-		if (this.getMaxTokens() && iOldLength >= this.getMaxTokens()) {
+		// Tokenizer is "full" or ValueHelp is open.
+		if (this.getMaxTokens() && iOldLength >= this.getMaxTokens() || this._bValueHelpOpen) {
 			return;
 		}
 
@@ -406,7 +419,7 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 	/**
 	 * Setter for property <code>enableMultiLineMode</code>.
 	 * @param {boolean} bMultiLineMode Property value
-	 * @returns Pointer to the control instance for chaining
+	 * @returns {sap.m.MultiInput} Pointer to the control instance for chaining
 	 * @since 1.28
 	 * @public
 	 */
@@ -591,7 +604,7 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 
 	/**
 	 * Returns the sap.ui.core.ScrollEnablement delegate which is used with this control.
-	 * @returns The scroll delegate
+	 * @returns {sap.ui.core.ScrollEnablement} The scroll delegate
 	 * @private
 	 */
 	MultiInput.prototype.getScrollDelegate = function () {
@@ -604,30 +617,10 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 	 * @private
 	 */
 	MultiInput.prototype.onBeforeRendering = function () {
-		var oTokenizer = this.getAggregation("tokenizer"),
-			iTokenCount = this.getTokens().length,
-			oInvisibleText,
-			sMultiInputAria = "";
+		var oTokenizer = this.getAggregation("tokenizer");
 
 		if (oTokenizer) {
 			oTokenizer.toggleStyleClass("sapMTokenizerEmpty", oTokenizer.getTokens().length === 0);
-		}
-
-		if (sap.ui.getCore().getConfiguration().getAccessibility()) {
-			oInvisibleText = this.getAggregation("_tokensInfo");
-			switch (iTokenCount) {
-				case 0:
-					sMultiInputAria = oRb.getText("MULTIINPUT_ARIA_CONTAIN_TOKEN");
-					break;
-				case 1:
-					sMultiInputAria = oRb.getText("MULTIINPUT_ARIA_CONTAIN_ONE_TOKEN");
-					break;
-				default:
-					sMultiInputAria = oRb.getText("MULTIINPUT_ARIA_CONTAIN_SEVERAL_TOKENS", iTokenCount);
-					break;
-			}
-
-			oInvisibleText.setText(sMultiInputAria);
 		}
 
 		Input.prototype.onBeforeRendering.apply(this, arguments);
@@ -804,7 +797,7 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 					var lastInvalidText = "";
 					for (i = 0; i < aSeparatedText.length; i++) {
 						if (aSeparatedText[i]) { // pasting from excel can produce empty strings in the array, we don't have to handle empty strings
-							var oToken = this._convertTextToToken(aSeparatedText[i]);
+							var oToken = this._convertTextToToken(aSeparatedText[i], true);
 							if (oToken) {
 								aValidTokens.push(oToken);
 							} else {
@@ -838,7 +831,7 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 
 	};
 
-	MultiInput.prototype._convertTextToToken = function (text) {
+	MultiInput.prototype._convertTextToToken = function (text, bCopiedToken) {
 		var result = null,
 			item = null,
 			token = null,
@@ -853,8 +846,9 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 		if (!text) {
 			return null;
 		}
-
-		if ( this._getIsSuggestionPopupOpen()) { // only take item from suggestion list if popup is open
+		if ( this._getIsSuggestionPopupOpen() || bCopiedToken) {
+			// only take item from suggestion list if popup is open
+			// or token is pasted (otherwise pasting multiple tokens at once does not work)
 			if (this._hasTabularSuggestions()) {
 				//if there is suggestion table, select the correct item, to avoid selecting the wrong item but with same text.
 				item = this._oSuggestionTable._oSelectedItem;
@@ -966,6 +960,9 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 	 * @param {jQuery.Event} oEvent The event object
 	 */
 	MultiInput.prototype.onsapenter = function (oEvent) {
+		if (Input.prototype.onsapenter) {
+			Input.prototype.onsapenter.apply(this, arguments);
+		}
 
 		var bValidateFreeText = true;
 
@@ -979,10 +976,6 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 
 		if (bValidateFreeText) {
 			this._validateCurrentText();
-		}
-
-		if (Input.prototype.onsapenter) {
-			Input.prototype.onsapenter.apply(this, arguments);
 		}
 
 		this.focus();
@@ -1025,7 +1018,9 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 
 		Input.prototype.onsapfocusleave.apply(this, arguments);
 
-		if (this._bIsValidating) { // an asynchronous validation is running, no need to trigger validation again
+		// an asynchronous validation is running, no need to trigger validation again
+		// OR the ValueHelp is triggered. either ways- no need for validation
+		if (this._bIsValidating || this._bValueHelpOpen) {
 			return;
 		}
 
@@ -1105,6 +1100,7 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 	 * @param {jQuery.Event} oEvent The event object
 	 */
 	MultiInput.prototype.onfocusin = function (oEvent) {
+		this._bValueHelpOpen = false; //This means the ValueHelp is closed and the focus is back. So, reset that var
 
 		if (this.getEditable() && this.getEnableMultiLineMode() && (!oEvent.target.classList.contains("sapMInputValHelp") && !oEvent.target.classList.contains("sapMInputValHelpInner"))) {
 			this.openMultiLine();
@@ -1337,56 +1333,15 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 		return item;
 	};
 
-	MultiInput.prototype.addToken = function (oToken) {
-		this._tokenizer.addToken(oToken);
-		return this;
-	};
-
-	MultiInput.prototype.removeToken = function (oToken) {
-		return this._tokenizer.removeToken(oToken);
-	};
-
-	MultiInput.prototype.removeAllTokens = function () {
-		return this._tokenizer.removeAllTokens();
-	};
-
-	MultiInput.prototype.getTokens = function () {
-		return this._tokenizer.getTokens();
-	};
-
-	MultiInput.prototype.insertToken = function (oToken, iIndex) {
-		this._tokenizer.insertToken(oToken, iIndex);
-		return this;
-	};
-
-	MultiInput.prototype.indexOfToken = function (oToken) {
-		return this._tokenizer.indexOfToken(oToken);
-	};
-
-	MultiInput.prototype.destroyTokens = function () {
-		this._tokenizer.destroyTokens();
-		return this;
-	};
-
-	MultiInput.prototype.updateTokens = function () {
-		this.destroyTokens();
-		this.updateAggregation("tokens");
-	};
-
-	MultiInput.prototype.getAggregation = function (sAggregationName, oDefaultForCreation) {
-		var aTokens;
-		if (sAggregationName === "tokens") {
-			aTokens = this.getTokens();
-
-			if (aTokens.length === 0) {
-				aTokens = oDefaultForCreation || null;
-			}
-
-			return aTokens;
-		} else {
-			return Input.prototype.getAggregation.apply(this, arguments);
+	MultiInput.getMetadata().forwardAggregation(
+		"tokens",
+		{
+			getter: function(){ return this._tokenizer; },
+			aggregation: "tokens",
+			forwardBinding: true
 		}
-	};
+	);
+
 
 	/**
 	 * Function overwrites clone function to add tokens to MultiInput
@@ -1404,6 +1359,9 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 		this._tokenizer.detachTokenUpdate(this._onTokenUpdate, this);
 
 		oClone = Input.prototype.clone.apply(this, arguments);
+
+		oClone.destroyAggregation("tokenizer");
+		oClone._tokenizer = null;
 
 		oTokenizerClone = this._tokenizer.clone();
 		oClone._tokenizer = oTokenizerClone;
@@ -1474,9 +1432,18 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 	 */
 	MultiInput.prototype.getDomRefForValueStateMessage = MultiInput.prototype.getPopupAnchorDomRef;
 
+	/**
+	 * Updates the inner input field.
+	 *
+	 * @protected
+	 */
+	MultiInput.prototype.updateInputField = function() {
+		Input.prototype.updateInputField.call(this, '');
+	};
 
 	/**
 	 * @see sap.ui.core.Control#getAccessibilityInfo
+	 * @returns {object} The accessibility object
 	 * @protected
 	 */
 	MultiInput.prototype.getAccessibilityInfo = function () {
@@ -1493,4 +1460,4 @@ sap.ui.define(['jquery.sap.global', './Input', './Tokenizer', './Token', './libr
 
 	return MultiInput;
 
-}, /* bExport= */ true);
+});

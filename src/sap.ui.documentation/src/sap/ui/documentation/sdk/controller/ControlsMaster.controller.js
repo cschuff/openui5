@@ -6,15 +6,13 @@ sap.ui.define([
 		"jquery.sap.global",
 		"sap/ui/Device",
 		"sap/ui/documentation/sdk/controller/BaseController",
-		"sap/ui/documentation/sdk/controller/util/APIInfo",
 		"sap/ui/model/json/JSONModel",
 		"sap/ui/documentation/sdk/controller/util/ControlsInfo",
 		"sap/m/GroupHeaderListItem",
-		"sap/ui/core/Component",
 		"sap/ui/model/Filter",
 		"sap/ui/model/Sorter",
 		"jquery.sap.storage"
-	], function (jQuery, Device, BaseController, APIInfo, JSONModel, ControlsInfo, GroupHeaderListItem, Component,
+	], function (jQuery, Device, BaseController, JSONModel, ControlsInfo, GroupHeaderListItem,
 				 Filter, Sorter, jQueryStorage) {
 		"use strict";
 
@@ -102,6 +100,7 @@ sap.ui.define([
 				this._vsFilterBar = this._oView.byId("vsFilterBar");
 				this._vsFilterLabel = this._oView.byId("vsFilterLabel");
 
+				this._oRouter.getRoute("listFilter").attachPatternMatched(this._onFilterMatched, this);
 				this._oRouter.getRoute("group").attachPatternMatched(this._onGroupMatched, this);
 				this._oRouter.getRoute("entity").attachPatternMatched(this._onEntityMatched, this);
 				this._oRouter.getRoute("sample").attachPatternMatched(this._onSampleMatched, this);
@@ -131,8 +130,7 @@ sap.ui.define([
 				this._oComponent = this.getOwnerComponent();
 				this._oRootView = this.getRootView();
 
-				this._oViewSettings.compactOn = this._oComponent.getContentDensityClass() === "sapUiSizeCompact" &&
-					this._oRootView.hasStyleClass("sapUiSizeCompact");
+				this._oViewSettings.compactOn = this._oComponent.getContentDensityClass() === "sapUiSizeCompact";
 				this._oViewSettings.rtl = this._oCore.getConfiguration().getRTL();
 
 				// Keep default settings for compact mode up to date
@@ -144,7 +142,7 @@ sap.ui.define([
 
 			_viewSettingsResetOnNavigation: function (oEvent) {
 				var sRouteName = oEvent.getParameter("name");
-				if (["group", "entity", "sample", "code", "code_file", "controls", "controlsMaster"].indexOf(sRouteName) === -1) {
+				if (["group", "entity", "sample", "code", "code_file", "controls", "controlsMaster", "listFilter"].indexOf(sRouteName) === -1) {
 					// Reset view settings
 					this._applyAppConfiguration(this._oDefaultSettings.themeActive,
 						this._oDefaultSettings.compactOn,
@@ -170,45 +168,76 @@ sap.ui.define([
 			 * Apply content configuration
 			 * @param {string} sThemeActive name of the theme
 			 * @param {boolean} bCompactOn compact mode
+			 * @param {boolean} bRTL right to left mode
 			 * @private
 			 */
 			_applyAppConfiguration: function(sThemeActive, bCompactOn, bRTL){
 				var oSampleFrameContent,
+					oSampleFrameCore,
 					$SampleFrame,
-					oSampleRootControl,
-					oSamplePage;
+					bRTLChanged,
+					bThemeChanged,
+					bContentDensityChanged;
 
-				// Switch theme if necessary
-				this._oCore.applyTheme(sThemeActive);
-				// Switch content density
-				this._oRootView.toggleStyleClass("sapUiSizeCompact", bCompactOn)
-					.toggleStyleClass("sapUiSizeCozy", !bCompactOn);
-				this._oCore.getConfiguration().setRTL(bRTL);
+				// Handle content density change
+				if (this._oViewSettings.compactOn !== bCompactOn) {
+					jQuery(document.body).toggleClass("sapUiSizeCompact", bCompactOn)
+						.toggleClass("sapUiSizeCozy", !bCompactOn);
 
-				// If there is a sample page loaded try to find it's root container and invalidate it to let controls
-				// adapt to compact mode changes
-				if (this._oComponent._oCurrentOpenedSample) {
-					oSampleRootControl = this._oComponent._oCurrentOpenedSample.getComponentInstance().getRootControl();
-					// Keep in mind that getRootControl might return 'null'
-					if (oSampleRootControl) {
-						oSamplePage = oSampleRootControl.getContent()[0];
-						if (oSamplePage) {
-							oSamplePage.invalidate();
+					this._oViewSettings.compactOn = bCompactOn;
+					bContentDensityChanged = true;
+				}
+
+				// Handle RTL mode change
+				if (this._oViewSettings.rtl !== bRTL) {
+					this._oCore.getConfiguration().setRTL(bRTL);
+
+					this._oViewSettings.rtl = bRTL;
+					bRTLChanged = true;
+				}
+
+				// Handle theme change
+				if (this._oViewSettings.themeActive !== sThemeActive) {
+					this._oCore.applyTheme(sThemeActive);
+
+					this._oViewSettings.themeActive = sThemeActive;
+					bThemeChanged = true;
+				} else if (bContentDensityChanged) {
+					// NOTE: We notify for content density change only if no theme change is applied because both
+					// methods fire the same event which may lead to unpredictable result.
+					this._oCore.notifyContentDensityChanged();
+				}
+
+				// Apply theme and compact mode also to iframe samples if there is actually a change
+				if (bRTLChanged || bContentDensityChanged || bThemeChanged) {
+
+					$SampleFrame = jQuery("#sampleFrame");
+					if ($SampleFrame.length > 0) {
+						oSampleFrameContent = $SampleFrame[0].contentWindow;
+						if (oSampleFrameContent) {
+							oSampleFrameCore = oSampleFrameContent.sap.ui.getCore();
+
+							if (bContentDensityChanged) {
+								oSampleFrameContent.jQuery('body').toggleClass("sapUiSizeCompact", bCompactOn)
+									.toggleClass("sapUiSizeCozy", !bCompactOn);
+							}
+
+							if (bRTLChanged) {
+								oSampleFrameCore.getConfiguration().setRTL(bRTL);
+							}
+
+							if (bThemeChanged) {
+								oSampleFrameCore.applyTheme(sThemeActive);
+							} else if (bContentDensityChanged) {
+								// Notify Core for content density change only if no theme change happened
+								oSampleFrameCore.notifyContentDensityChanged();
+							}
+
 						}
 					}
+
 				}
 
-				// Apply theme and compact mode also to iframe samples
-				$SampleFrame = jQuery("#sampleFrame");
-				if ($SampleFrame.length > 0) {
-					oSampleFrameContent = $SampleFrame[0].contentWindow;
-					if (oSampleFrameContent) {
-						oSampleFrameContent.sap.ui.getCore().applyTheme(sThemeActive);
-						oSampleFrameContent.sap.ui.getCore().getConfiguration().setRTL(bRTL);
-						oSampleFrameContent.jQuery('body').toggleClass("sapUiSizeCompact", bCompactOn)
-							.toggleClass("sapUiSizeCozy", !bCompactOn);
-					}
-				}
 			},
 
 			_onGroupMatched: function (event) {
@@ -243,9 +272,41 @@ sap.ui.define([
 				}
 			},
 
+			_onFilterMatched: function (oEvent) {
+				var sFilterValue = oEvent.getParameter("arguments").value,
+					oSearchField;
+
+				if (sFilterValue) {
+					// Get the search control, apply the value and fire a live change event so the list will be filtered
+					oSearchField = this.byId("searchField");
+					oSearchField.setValue(sFilterValue).fireLiveChange({
+						newValue: sFilterValue
+					});
+
+					// Show master page: this call will show the master page only on small screen sizes but not on phone
+					jQuery.sap.delayedCall(0, this, function () {
+						this.getSplitApp().showMaster();
+					});
+
+					// On phone: navigation is needed so the user will see the master list
+					if (Device.system.phone) {
+						this.getRouter().navTo("controlsMaster", {});
+					}
+				}
+
+				// Call _onControlsMatched view to handle the rest of the needed initialization as this is a sub-route
+				this._onControlsMatched(oEvent);
+			},
+
 			_onControlsMatched: function() {
 				this.showMasterSide();
 				this._resetListSelection();
+
+				if (Device.system.desktop) {
+					jQuery.sap.delayedCall(0, this, function () {
+						this.getView().byId("searchField").getFocusDomRef().focus();
+					});
+				}
 			},
 
 			/* =========================================================== */
@@ -442,11 +503,6 @@ sap.ui.define([
 				this._oVSDialog.setSelectedGroupItem(this._oListSettings.groupProperty);
 				this._oVSDialog.setGroupDescending(this._oListSettings.groupDescending);
 
-				// Apply cozy/compact mode to the dialog
-				this._oVSDialog
-					.toggleStyleClass("sapUiSizeCompact", this._oViewSettings.compactOn)
-					.toggleStyleClass("sapUiSizeCozy", !this._oViewSettings.compactOn);
-
 				// open
 				this._oVSDialog.open();
 
@@ -567,9 +623,6 @@ sap.ui.define([
 
 					// Compact mode select
 					this._oCore.byId("CompactModeSwitch").setState(bCompactMode);
-					this._oSettingsDialog
-						.toggleStyleClass("sapUiSizeCompact", bCompactMode)
-						.toggleStyleClass("sapUiSizeCozy", !bCompactMode);
 					this._oSettingsDialog.open();
 				});
 			},
@@ -607,10 +660,6 @@ sap.ui.define([
 				jQuery.sap.delayedCall(1000, this, function () {
 					this._oBusyDialog.close();
 				});
-
-				this._oViewSettings.compactOn = bCompact;
-				this._oViewSettings.themeActive = sTheme;
-				this._oViewSettings.rtl = bRTL;
 
 				// handle settings change
 				this._applyAppConfiguration(sTheme, bCompact, bRTL);

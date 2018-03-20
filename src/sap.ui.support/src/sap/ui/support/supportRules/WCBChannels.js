@@ -68,11 +68,25 @@ function () {
 		ON_PROGRESS_UPDATE:         "ON_PROGRESS_UPDATE",
 
 		/**
+		 * Notifies that the analysis has started.
+		 * @type {string}
+		 * @const
+		 */
+		ON_ANALYZE_STARTED:          "ON_ANALYZE_STARTED",
+
+		/**
 		 * Notifies after the analysis has finished.
 		 * @type {string}
 		 * @const
 		 */
 		ON_ANALYZE_FINISH:          "ON_ANALYZE_FINISH",
+
+		/**
+		 * Posts information about the UI and it's iframe.
+		 * @type {string}
+		 * @const
+		 */
+		POST_UI_INFORMATION:  "POST_UI_INFORMATION",
 
 		/**
 		 * Verifies rule creation.
@@ -219,6 +233,27 @@ function () {
 		 * @type {string}
 		 * @const
 		 */
-		GET_ISSUES:                 "GET_ISSUES"
+		GET_ISSUES:                 "GET_ISSUES",
+
+		/**
+		 * Posts a message.
+		 * @type {string}
+		 * @const
+		 */
+		POST_MESSAGE:               "POST_MESSAGE",
+
+		/**
+		 * Get non loaded libraries with rules names
+		 * @type {string}
+		 * @const
+		 */
+		GET_NON_LOADED_RULE_SETS:   "GET_NON_LOADED_RULE_SETS",
+
+		/**
+		 * Progress of current loading process
+		 * @type {string}
+		 * @const
+		 */
+		CURRENT_LOADING_PROGRESS:   "CURRENT_LOADING_PROGRESS"
 	};
 }, true);

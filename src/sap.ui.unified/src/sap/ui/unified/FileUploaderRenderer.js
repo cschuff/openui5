@@ -3,8 +3,8 @@
  */
 
 // Provides default renderer for control sap.ui.unified.FileUploader
-sap.ui.define(['jquery.sap.global'],
-	function(jQuery) {
+sap.ui.define(['jquery.sap.global', 'sap/ui/unified/library'],
+	function(jQuery, library) {
 	"use strict";
 
 
@@ -33,7 +33,7 @@ sap.ui.define(['jquery.sap.global'],
 			oRm.addClass("sapUiFupButtonOnly");
 		}
 
-		var sClass = sap.ui.unified.FileUploaderHelper.addFormClass();
+		var sClass = library.FileUploaderHelper.addFormClass();
 		if (sClass) {
 			oRm.addClass(sClass);
 		}
@@ -107,7 +107,7 @@ sap.ui.define(['jquery.sap.global'],
 		// hidden pure input type file (surrounded by a div which is responsible for giving the input the correct size)
 		var sName = oFileUploader.getName() || oFileUploader.getId();
 		oRm.write('<div class="sapUiFupInputMask"');
-		if (sTooltip.length) {
+		if (sTooltip && sTooltip.length) {
 			oRm.writeAttributeEscaped('title', sTooltip);
 		}
 		oRm.write('>');

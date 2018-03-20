@@ -3,11 +3,7 @@
  */
 
 // Provides control sap.m.MaskInput.
-sap.ui.define([
-	'jquery.sap.global',
-	'./InputBase',
-	'./MaskEnabler'
-], function (jQuery, InputBase, MaskEnabler) {
+sap.ui.define(['./InputBase', './MaskEnabler', './MaskInputRenderer'], function(InputBase, MaskEnabler, MaskInputRenderer) {
 	"use strict";
 
 
@@ -29,6 +25,7 @@ sap.ui.define([
 	 * @public
 	 * @since 1.34.0
 	 * @alias sap.m.MaskInput
+	 * @see {@link fiori:https://experience.sap.com/fiori-design-web/generic-mask-input/ Mask Input}
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	var MaskInput = InputBase.extend("sap.m.MaskInput", /** @lends sap.m.MaskInput.prototype */ {
@@ -65,7 +62,16 @@ sap.ui.define([
 
 	MaskEnabler.call(MaskInput.prototype);
 
+	/**
+	 * Returns if the mask is enabled.
+	 *
+	 * @returns {boolean}
+	 * @private
+	 */
+	MaskInput.prototype._isMaskEnabled = function () {
+		return true;
+	};
 
 	return MaskInput;
 
-}, /* bExport= */ true);
+});

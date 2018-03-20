@@ -4,10 +4,17 @@
 
 /*global history */
 sap.ui.define([
+		"jquery.sap.global",
+		"sap/ui/Device",
 		"sap/ui/documentation/sdk/controller/MasterTreeBaseController",
-		"sap/ui/model/json/JSONModel"
-	], function (MasterTreeBaseController, JSONModel) {
+		"sap/m/library"
+	], function (jQuery, Device, MasterTreeBaseController, mobileLibrary) {
 		"use strict";
+
+
+
+		// shortcut for sap.m.SplitAppMode
+		var SplitAppMode = mobileLibrary.SplitAppMode;
 
 
 
@@ -21,7 +28,7 @@ sap.ui.define([
 				var oComponent = this.getOwnerComponent();
 
 				oComponent.loadVersionInfo()
-					.then(oComponent.fetchAPIInfoAndBindModels.bind(oComponent))
+				.then(oComponent.fetchAPIIndex.bind(oComponent))
 					.then(function () {
 						this._expandTreeToNode(this._topicId, this.getOwnerComponent().getModel("treeData"));
 					}.bind(this));
@@ -63,11 +70,17 @@ sap.ui.define([
 					masterTree = this.byId('tree'),
 					selectedItem;
 
-				splitApp.setMode(sap.m.SplitAppMode.ShowHideMode);
+				splitApp.setMode(SplitAppMode.ShowHideMode);
 
 				if (masterTree) {
 					selectedItem = masterTree.getSelectedItem();
 					selectedItem && selectedItem.setSelected(false);
+				}
+
+				if (Device.system.desktop) {
+					jQuery.sap.delayedCall(0, this, function () {
+						this.getView().byId("searchField").getFocusDomRef().focus();
+					});
 				}
 			},
 

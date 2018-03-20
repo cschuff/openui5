@@ -2,8 +2,8 @@
  * ${copyright}
  */
 
-sap.ui.define(["jquery.sap.global", "sap/ui/model/odata/ODataUtils", "sap/ui/Device", "sap/ui/core/library", "sap/ui/thirdparty/URI", "sap/ui/core/message/MessageParser", "sap/ui/core/message/Message"],
-	function(jQuery, ODataUtils, Device, coreLibrary, URI, MessageParser, Message) {
+sap.ui.define(["jquery.sap.global", "sap/ui/model/odata/ODataUtils", "sap/ui/core/library", "sap/ui/thirdparty/URI", "sap/ui/core/message/MessageParser", "sap/ui/core/message/Message"],
+	function(jQuery, ODataUtils, coreLibrary, URI, MessageParser, Message) {
 	"use strict";
 
 // shortcuts for enums
@@ -394,37 +394,38 @@ ODataMessageParser.prototype._getFunctionTarget = function(mFunctionInfo, mReque
 		} else if (mFunctionInfo.returnType) {
 			mEntityType = this._metadata._getEntityTypeByName(mFunctionInfo.returnType);
 		}
+		if (mEntityType){
+			var mEntitySet = this._metadata._getEntitySetByType(mEntityType);
 
-		var mEntitySet = this._metadata._getEntitySetByType(mEntityType);
+			if (mEntitySet && mEntityType && mEntityType.key && mEntityType.key.propertyRef) {
 
-		if (mEntitySet && mEntityType && mEntityType.key && mEntityType.key.propertyRef) {
+				var sId = "";
+				var sParam;
 
-			var sId = "";
-			var sParam;
-
-			if (mEntityType.key.propertyRef.length === 1) {
-				// Just the ID in brackets
-				sParam = mEntityType.key.propertyRef[0].name;
-				if (mUrlData.parameters[sParam]) {
-					sId = mUrlData.parameters[sParam];
-				}
-			} else {
-				// Build ID string from keys
-				var aKeys = [];
-				for (i = 0; i < mEntityType.key.propertyRef.length; ++i) {
-					sParam = mEntityType.key.propertyRef[i].name;
+				if (mEntityType.key.propertyRef.length === 1) {
+					// Just the ID in brackets
+					sParam = mEntityType.key.propertyRef[0].name;
 					if (mUrlData.parameters[sParam]) {
-						aKeys.push(sParam + "=" + mUrlData.parameters[sParam]);
+						sId = mUrlData.parameters[sParam];
 					}
+				} else {
+					// Build ID string from keys
+					var aKeys = [];
+					for (i = 0; i < mEntityType.key.propertyRef.length; ++i) {
+						sParam = mEntityType.key.propertyRef[i].name;
+						if (mUrlData.parameters[sParam]) {
+							aKeys.push(sParam + "=" + mUrlData.parameters[sParam]);
+						}
+					}
+					sId = aKeys.join(",");
 				}
-				sId = aKeys.join(",");
-			}
 
-			sTarget = "/" + mEntitySet.name + "(" + sId + ")";
-		} else if (!mEntitySet) {
-			jQuery.sap.log.error("Could not determine path of EntitySet for function call: " + mUrlData.url);
-		} else {
-			jQuery.sap.log.error("Could not determine keys of EntityType for function call: " + mUrlData.url);
+				sTarget = "/" + mEntitySet.name + "(" + sId + ")";
+			} else if (!mEntitySet) {
+				jQuery.sap.log.error("Could not determine path of EntitySet for function call: " + mUrlData.url);
+			} else {
+				jQuery.sap.log.error("Could not determine keys of EntityType for function call: " + mUrlData.url);
+			}
 		}
 	}
 
@@ -453,13 +454,16 @@ ODataMessageParser.prototype._createTarget = function(oMessageObject, mRequestIn
 		var sMethod = (mRequestInfo.request && mRequestInfo.request.method) ? mRequestInfo.request.method : "GET";
 		var bRequestCreatePost = (sMethod === "POST"
 			&& mRequestInfo.response
-			&& (mRequestInfo.response.statusCode === "201" || mRequestInfo.response.statusCode === 201)
+			&& mRequestInfo.response.statusCode == 201
 			&& mRequestInfo.response.headers
 			&& mRequestInfo.response.headers["location"]);
 
 		var sUrlForTargetCalculation;
 		if (bRequestCreatePost) {
 			sUrlForTargetCalculation = mRequestInfo.response.headers["location"];
+		} else if (mRequestInfo.request && mRequestInfo.request.key && mRequestInfo.request.created && mRequestInfo.response && mRequestInfo.response.statusCode >= 400) {
+			// If a create request returns an error the target should be set to the internal entity key
+			sUrlForTargetCalculation = mRequestInfo.request.key;
 		} else {
 			sUrlForTargetCalculation = mRequestInfo.url;
 		}

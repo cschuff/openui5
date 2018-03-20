@@ -21,14 +21,15 @@ sap.ui.define([
 		queue = [],
 		context = {},
 		timeout = -1,
-		isStopped,
-		oDeferred,
+		oStopQueueOptions,
+		oQueueDeferred,
 		isEmptyQueueStarted,
+		lastInternalWaitStack,
 		oValidator = new _ParameterValidator({
 			errorPrefix: "sap.ui.test.Opa#waitFor"
 		});
 
-	function internalWait (fnCallback, oOptions, oDeferred) {
+	function internalWait (fnCallback, oOptions) {
 
 		// Increase the wait timeout in debug mode, to allow debugging the waitFor without getting timeouts
 		if (window["sap-ui-debug"]){
@@ -36,59 +37,67 @@ sap.ui.define([
 		}
 
 		var startTime = new Date();
-		fnCheck();
+		opaCheck();
 
-		function fnCheck () {
+		function opaCheck () {
+			/* eslint-disable no-console */
+			if (console.timeStamp){
+                console.timeStamp("opa.check");
+			}
+			/* eslint-enable no-console */
 			oLogCollector.getAndClearLog();
+
 			var oResult = fnCallback();
+			lastInternalWaitStack = oOptions._stack;
 
 			if (oResult.error) {
-				oDeferred.reject(oOptions);
+				oQueueDeferred.reject(oOptions);
 				return;
 			}
 
 			if (oResult.result) {
-				internalEmpty(oDeferred);
+				internalEmpty();
 				return;
 			}
 
 			var iPassedSeconds = (new Date() - startTime) / 1000;
 
 			if (oOptions.timeout === 0 || oOptions.timeout > iPassedSeconds) {
-				timeout = setTimeout(fnCheck, oOptions.pollingInterval);
-				// timeout not yet reached
+				timeout = setTimeout(opaCheck, oOptions.pollingInterval);
+				// OPA timeout not yet reached
 				return;
 			}
 
 			// Timeout is reached and the check never returned true.
 			// Execute the error function (if provided in the options) and reject the queue promise.
-			addErrorMessageToOptions("Opa timeout", oOptions);
+			addErrorMessageToOptions("Opa timeout after " + oOptions.timeout + " seconds", oOptions);
 
 			if (oOptions.error) {
 				try {
 					oOptions.error(oOptions, oResult.arguments);
 				} finally {
-					oDeferred.reject(oOptions);
+					oQueueDeferred.reject(oOptions);
 				}
-				return;
+			} else {
+				oQueueDeferred.reject(oOptions);
 			}
-
-			oDeferred.reject(oOptions);
 		}
 
 	}
 
-	function internalEmpty (deferred) {
-		if (queue.length === 0) {
-			deferred.resolve();
+	function internalEmpty () {
+		if (!queue.length) {
+			if (oQueueDeferred) {
+				oQueueDeferred.resolve();
+			}
 			return true;
 		}
 
 		var queueElement = queue.shift();
 
 		timeout = setTimeout(function () {
-			internalWait(queueElement.callback, queueElement.options, deferred);
-		}, Opa.config.executionDelay);
+			internalWait(queueElement.callback, queueElement.options);
+		}, (Opa.config.asyncPolling ? queueElement.options.pollingInterval : 0) + Opa.config.executionDelay);
 	}
 
 	function ensureNewlyAddedWaitForStatementsPrepended (oWaitForCounter, oNestedInOptions){
@@ -298,6 +307,7 @@ sap.ui.define([
 		// URI params overwrite default
 		// deep extend is necessary so appParams object is not overwritten but merged
 		Opa.config = $.extend(true, Opa.config, options, opaUriParams);
+		_OpaLogger.setLevel(Opa.config.logLevel);
 	};
 
 	Opa._parseParam = function(sParam) {
@@ -372,7 +382,8 @@ sap.ui.define([
 			pollingInterval : 400,
 			debugTimeout: 0,
 			_stackDropCount : 0, //Internal use. Specify numbers of additional stack frames to remove for logging
-			executionDelay: executionDelayDefault
+			executionDelay: executionDelayDefault,
+			asyncPolling: false
 		},opaUriParams);
 	};
 
@@ -400,24 +411,26 @@ sap.ui.define([
 		}
 
 		isEmptyQueueStarted = true;
+		oStopQueueOptions = null;
 
-		oDeferred = $.Deferred();
-		isStopped = false;
+		oQueueDeferred = $.Deferred();
+		internalEmpty();
 
-		internalEmpty(oDeferred);
-
-		return oDeferred.promise().fail(function (oOptions) {
+		return oQueueDeferred.promise().fail(function (oOptions) {
 			queue = [];
 
-			if (isStopped) {
-				var sErrorMessage = oOptions.stoppedManually ? "Queue was stopped manually" : "QUnit timeout";
-				oOptions._stack = createStack(1);
+			if (oStopQueueOptions) {
+				var sErrorMessage = oStopQueueOptions.qunitTimeout ? "QUnit timeout after " + oStopQueueOptions.qunitTimeout + " seconds" : "Queue was stopped manually";
+				// if the queue was running, log the stack of the last executed check before the queue was stopped
+				oOptions._stack = oStopQueueOptions.qunitTimeout && lastInternalWaitStack || createStack(1);
 				addErrorMessageToOptions(sErrorMessage, oOptions);
 			}
 
 		}).always(function () {
+			queue = [];
 			timeout = -1;
-			oDeferred = null;
+			oQueueDeferred = null;
+			lastInternalWaitStack = null;
 			isEmptyQueueStarted = false;
 		});
 	};
@@ -425,32 +438,30 @@ sap.ui.define([
 	/**
 	 * Clears the queue and stops running tests so that new tests can be run.
 	 * This means all waitFor statements registered by {@link sap.ui.test.Opa#waitFor} will not be invoked anymore and
-	 * the promise returned by {@link sap.ui.test.Opa.emptyQueue}
-	 * will be rejected or resolved depending on the failTest parameter.
-	 * When its called inside of a check in {@link sap.ui.test.Opa#waitFor}
+	 * the promise returned by {@link sap.ui.test.Opa.emptyQueue} will be rejected
+	 * When it is called inside of a check in {@link sap.ui.test.Opa#waitFor}
 	 * the success function of this waitFor will not be called.
 	 * @since 1.40.1
 	 * @public
 	 */
 	Opa.stopQueue = function stopQueue () {
-		Opa._stopQueue(true);
+		Opa._stopQueue();
 	};
 
-	Opa._stopQueue = function (bStoppedManually) {
+	Opa._stopQueue = function (oOptions) {
 		// clear queue
 		queue = [];
 
-		// clear running tests
-		if (!oDeferred) {
+		if (!oQueueDeferred) {
 			oLogger.warning("stopQueue was called before emptyQueue, queued tests have never been executed", "Opa");
 		} else {
+			// clear running internalWait poll
 			if (timeout !== -1) {
 				clearTimeout(timeout);
 			}
 
-			isStopped = true;
-
-			oDeferred.reject({stoppedManually: bStoppedManually});
+			oStopQueueOptions = oOptions || {};
+			oQueueDeferred.reject(oStopQueueOptions);
 		}
 	};
 
@@ -522,9 +533,9 @@ sap.ui.define([
 
 			queue.push({
 				callback : function () {
+					// check is truthy if there is no check function
 					var bCheckPassed = true;
 
-					//no check - all ok
 					if (options.check) {
 						try {
 							bCheckPassed = options.check.apply(this, arguments);
@@ -532,33 +543,36 @@ sap.ui.define([
 							var sErrorMessage = "Failure in Opa check function\n" + getMessageForException(oError);
 							addErrorMessageToOptions(sErrorMessage, options, oError.stack);
 							deferred.reject(options);
-							return {result: false, error: true, arguments : arguments};
+							return {error: true, arguments: arguments};
 						}
 					}
 
-					if (isStopped) {
-						// skip executing success and don't add new things
-						return { result: true, arguments: arguments };
+					// if queue is stopped in the check function, don't execute success function and stop internalWait
+					if (oStopQueueOptions) {
+						return {result: true, arguments: arguments};
 					}
 
-					if (bCheckPassed) {
-						if (options.success) {
-							var oWaitForCounter = Opa._getWaitForCounter();
-							try {
-								options.success.apply(this, arguments);
-							} catch (oError) {
-								var sErrorMessage = "Failure in Opa success function\n" + getMessageForException(oError);
-								addErrorMessageToOptions(sErrorMessage, options, oError.stack);
-								deferred.reject(options);
-								return {result: false, error: true, arguments : arguments};
-							} finally {
-								ensureNewlyAddedWaitForStatementsPrepended(oWaitForCounter, options);
-							}
-						}
-						deferred.resolve();
-						return { result : true, arguments : arguments };
+					if (!bCheckPassed) {
+						return {result: false, arguments: arguments};
 					}
-					return {result : false, arguments : arguments };
+
+					if (options.success) {
+						var oWaitForCounter = Opa._getWaitForCounter();
+						try {
+							options.success.apply(this, arguments);
+						} catch (oError) {
+							var sErrorMessage = "Failure in Opa success function\n" + getMessageForException(oError);
+							addErrorMessageToOptions(sErrorMessage, options, oError.stack);
+							deferred.reject(options);
+							return {error: true, arguments: arguments};
+						} finally {
+							ensureNewlyAddedWaitForStatementsPrepended(oWaitForCounter, options);
+						}
+					}
+
+					// check and success are OK
+					deferred.resolve();
+					return {result: true, arguments: arguments};
 				}.bind(this),
 				options : options
 			});
@@ -651,7 +665,8 @@ sap.ui.define([
 		"timeout",
 		"debugTimeout",
 		"pollingInterval",
-		"_stackDropCount"
+		"_stackDropCount",
+		"asyncPolling"
 	];
 
 	/* all config values  that will be used in waitFor */
@@ -663,7 +678,8 @@ sap.ui.define([
 		debugTimeout: "numeric",
 		pollingInterval: "numeric",
 		_stackDropCount: "numeric",
-		errorMessage: "string"
+		errorMessage: "string",
+		asyncPolling: "bool"
 	};
 
 

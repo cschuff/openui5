@@ -49,8 +49,7 @@ sap.ui.define([
 
 			if (oIN != null
 				&& !oTable._getKeyboardExtension()._isItemNavigationSuspended()
-				&& !oEvent.isMarked("sapUiTableSkipItemNavigation")
-				&& !TableUtils.isBusyIndicatorVisible(oTable)) {
+				&& !oEvent.isMarked("sapUiTableSkipItemNavigation")) {
 
 				oIN["on" + oEvent.type](oEvent);
 			}
@@ -111,11 +110,6 @@ sap.ui.define([
 		 */
 		_initItemNavigation: function(oExtension) {
 			var oTable = oExtension.getTable();
-
-			if (TableUtils.isBusyIndicatorVisible(oTable)) {
-				return;
-			}
-
 			var $Table = oTable.$();
 			var iColumnCount = TableUtils.getVisibleColumnCount(oTable);
 			var iTotalColumnCount = iColumnCount;
@@ -190,7 +184,9 @@ sap.ui.define([
 					}
 
 					if (bHasRowActions) {
-						aHeaderDomRefs.push($Table.find(".sapUiTableRowActionHeader").get(0));
+						// Only add a dummy (inivisible inner text) to fullfill matrix for item navigation.
+						// Header should not be focuable.
+						aHeaderDomRefs.push($Table.find(".sapUiTableRowActionHeader").children().get(0));
 					}
 				}
 
@@ -362,7 +358,7 @@ sap.ui.define([
 	/**
 	 * Returns whether the table is in action mode.
 	 *
-	 * @returns {boolean} Returns <code>true/code>, if the table is in action mode.
+	 * @returns {boolean} Returns <code>true</code>, if the table is in action mode.
 	 * @public
 	 */
 	TableKeyboardExtension.prototype.isInActionMode = function() {
@@ -431,8 +427,8 @@ sap.ui.define([
 	/**
 	 * Returns the combined info about the last focused data cell (based on the item navigation).
 	 *
-	 * @protected
 	 * @returns {sap.ui.table.TableUtils.FocusedItemInfo} The cell info of the last focused cell.
+	 * @protected
 	 */
 	TableKeyboardExtension.prototype._getLastFocusedCellInfo = function() {
 		var iHeader = TableUtils.getHeaderRowCount(this.getTable());
@@ -509,7 +505,7 @@ sap.ui.define([
 	};
 
 	return TableKeyboardExtension;
-}, /* bExport= */ true);
+	});
 
 /**
  * Gets the keyboard extension.

@@ -4,9 +4,21 @@
 
 // Provides control sap.m.P13nSelectionPanel.
 sap.ui.define([
-	'jquery.sap.global', './ColumnListItem', './P13nPanel', './P13nSelectionItem', './SearchField', './Table', './library', 'sap/ui/core/Control', 'sap/ui/model/ChangeReason', 'sap/ui/model/json/JSONModel'
-], function(jQuery, ColumnListItem, P13nPanel, P13nSelectionItem, SearchField, Table, library, Control, ChangeReason, JSONModel) {
+	'jquery.sap.global', './ColumnListItem', './P13nPanel', './SearchField', './Table', './library', 'sap/ui/core/library','sap/ui/model/ChangeReason', 'sap/ui/model/json/JSONModel', 'sap/ui/model/BindingMode', 'sap/ui/core/ResizeHandler', 'sap/m/ScrollContainer', './P13nSelectionItem'
+], function(jQuery, ColumnListItem, P13nPanel, SearchField, Table, library, CoreLibrary, ChangeReason, JSONModel, BindingMode, ResizeHandler, ScrollContainer /*, kept for compatibility: P13nSelectionItem */) {
 	"use strict";
+
+	// shortcut for sap.m.ToolbarDesign
+	var ToolbarDesign = library.ToolbarDesign;
+
+	// shortcut for sap.m.ListType
+	var ListType = library.ListType;
+
+	// shortcut for sap.m.ListMode
+	var ListMode = library.ListMode;
+
+	// shortcut for sap.m.P13nPanelType
+	var P13nPanelType = library.P13nPanelType;
 
 	/**
 	 * Constructor for a new P13nSelectionPanel.
@@ -102,17 +114,17 @@ sap.ui.define([
 			countOfSelectedItems: 0,
 			countOfItems: 0
 		});
-		oModel.setDefaultBindingMode(sap.ui.model.BindingMode.TwoWay);
+		oModel.setDefaultBindingMode(BindingMode.TwoWay);
 		oModel.setSizeLimit(1000);
 		this.setModel(oModel, "$sapmP13nSelectionPanel");
 
-		this.setType(sap.m.P13nPanelType.selection);
+		this.setType(P13nPanelType.selection);
 
 		this._createTable();
 		this._createToolbar();
 
 		this.setVerticalScrolling(false);
-		var oScrollContainer = new sap.m.ScrollContainer({
+		var oScrollContainer = new ScrollContainer({
 			horizontal: false,
 			vertical: true,
 			content: [
@@ -133,8 +145,8 @@ sap.ui.define([
 				var $dialogCont = null, iContentHeight, iHeaderHeight;
 				var oParent = that.getParent();
 				var oToolbar = that._getToolbar();
-				if (oParent) {
-					$dialogCont = jQuery("#" + oParent.getId() + "-cont");
+				if (oParent && oParent.$) {
+					$dialogCont = oParent.$("cont");
 					if ($dialogCont.children().length > 0 && oToolbar.$().length > 0) {
 						iScrollContainerHeightOld = oScrollContainer.$()[0].clientHeight;
 
@@ -152,7 +164,7 @@ sap.ui.define([
 			}
 			return bChangeResult;
 		};
-		this._sContainerResizeListener = sap.ui.core.ResizeHandler.register(oScrollContainer, this._fnHandleResize);
+		this._sContainerResizeListener = ResizeHandler.register(oScrollContainer, this._fnHandleResize);
 	};
 
 	P13nSelectionPanel.prototype.onBeforeRendering = function() {
@@ -189,7 +201,7 @@ sap.ui.define([
 	};
 
 	P13nSelectionPanel.prototype.exit = function() {
-		sap.ui.core.ResizeHandler.deregister(this._sContainerResizeListener);
+		ResizeHandler.deregister(this._sContainerResizeListener);
 		this._sContainerResizeListener = null;
 
 		this._getToolbar().destroy();
@@ -318,12 +330,12 @@ sap.ui.define([
 	P13nSelectionPanel.prototype._createTable = function() {
 		var that = this;
 		this._oTable = new Table({
-			mode: sap.m.ListMode.MultiSelect,
+			mode: ListMode.MultiSelect,
 			rememberSelections: false,
-			// itemPress: jQuery.proxy(this._onItemPressed, this),
 			selectionChange: jQuery.proxy(this._onSelectionChange, this),
 			columns: [
 				new sap.m.Column({
+                    vAlign: CoreLibrary.VerticalAlign.Middle,
 					header: new sap.m.Text({
 						text: {
 							parts: [
@@ -345,33 +357,43 @@ sap.ui.define([
 			items: {
 				path: "/items",
 				templateShareable: false,
-				template: new sap.m.ColumnListItem({
-					cells: [
-						new sap.m.Link({
-							href: "{href}",
-							text: "{text}",
-							target: "{target}",
-							enabled: {
-								path: 'href',
-								formatter: function(oValue) {
-									if (!oValue) {
-										this.addStyleClass("sapUiCompSmartLink");
+				template: new ColumnListItem({
+					cells: new sap.m.VBox({
+						items: [
+							new sap.m.Link({
+								href: "{href}",
+								text: "{text}",
+								target: "{target}",
+								enabled: {
+									path: 'href',
+									formatter: function(oValue) {
+										if (!oValue) {
+											this.addStyleClass("sapUiCompSmartLink");
+										}
+										return !!oValue;
 									}
-									return !!oValue;
+								},
+								press: function(oEvent) {
+									var fOnLinkPress = that._getInternalModel().getProperty("/linkPressMap")[this.getText() + "---" + this.getHref()];
+									if (fOnLinkPress) {
+										fOnLinkPress(oEvent);
+									}
 								}
-							},
-							press: function(oEvent) {
-								var fOnLinkPress = that._getInternalModel().getProperty("/linkPressMap")[this.getText() + "---" + this.getHref()];
-								if (fOnLinkPress) {
-									fOnLinkPress(oEvent);
-								}
-							}
-						})
-					],
+							}), new sap.m.Text({
+								visible: {
+									path: 'description',
+									formatter: function(sDescription) {
+										return !!sDescription;
+									}
+								},
+								text: "{description}"
+							})
+						]
+					}),
 					visible: "{visible}",
 					selected: "{persistentSelected}",
 					tooltip: "{tooltip}",
-					type: sap.m.ListType.Active
+					type: ListType.Active
 				})
 			}
 		});
@@ -381,7 +403,7 @@ sap.ui.define([
 	P13nSelectionPanel.prototype._createToolbar = function() {
 		var that = this;
 		var oToolbar = new sap.m.OverflowToolbar(this.getId() + "-toolbar", {
-			design: sap.m.ToolbarDesign.Auto,
+			design: ToolbarDesign.Auto,
 			content: [
 				new sap.m.ToolbarSpacer(), new SearchField(this.getId() + "-searchField", {
 					liveChange: function(oEvent) {
@@ -563,7 +585,8 @@ sap.ui.define([
 				href: oItem.getHref(),
 				target: oItem.getTarget(),
 				// default value
-				persistentSelected: oItem.getVisible()
+				persistentSelected: oItem.getVisible(),
+				description: oItem.getDescription()
 			};
 		}, this));
 
@@ -587,4 +610,4 @@ sap.ui.define([
 
 	return P13nSelectionPanel;
 
-}, /* bExport= */true);
+});

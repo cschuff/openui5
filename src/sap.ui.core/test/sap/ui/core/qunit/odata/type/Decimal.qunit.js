@@ -22,13 +22,12 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.type.Decimal", {
 		beforeEach : function () {
-			this.oLogMock = sinon.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(jQuery.sap.log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 			sap.ui.getCore().getConfiguration().setLanguage("en-US");
 		},
 		afterEach : function () {
-			this.oLogMock.verify();
 			sap.ui.getCore().getConfiguration().setLanguage(sDefaultLanguage);
 		}
 	});
@@ -72,6 +71,8 @@ sap.ui.require([
 			warning : "Illegal precision: -1"},
 		{i : {precision : 0, scale : 3}, o : {scale : 3},
 			warning : "Illegal precision: 0"},
+		{i : {precision : true}, o : undefined,
+			warning : "Illegal precision: true"},
 		{i : {precision : 2, scale : 3}, o : {precision : 2, scale : Infinity},
 			warning : "Illegal scale: must be less than precision (precision=2, scale=3)"},
 		{i : {minimum : "foo"}, o : undefined,
@@ -88,7 +89,7 @@ sap.ui.require([
 			warning : "Illegal maximumExclusive: X"}
 	].forEach(function (oFixture) {
 		QUnit.test("setConstraints(" + JSON.stringify(oFixture.i) + ")", function (assert) {
-			var oType = new Decimal();
+			var oType;
 
 			if (oFixture.warning) {
 				this.oLogMock.expects("warning")
@@ -242,7 +243,7 @@ sap.ui.require([
 		assert.strictEqual(oType.parseValue("1K", "string"), "1000", 'style: "short"');
 
 		// error handling with short style
-		sap.ui.test.TestUtils.withNormalizedMessages(function () {
+		TestUtils.withNormalizedMessages(function () {
 			try {
 				oType.parseValue("no number", "string");
 				assert.ok(false, "no error");

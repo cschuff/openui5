@@ -14,9 +14,13 @@ sap.ui.define([
 		// maps V2 sap:semantics value for a date part to corresponding V4 term relative to
 		// com.sap.vocabularies.Common.v1.
 		mDatePartSemantics2CommonTerm = {
+			"fiscalyear" : "IsFiscalYear",
+			"fiscalyearperiod" : "IsFiscalYearPeriod",
 			"year" : "IsCalendarYear",
 			"yearmonth" : "IsCalendarYearMonth",
-			"yearmonthday" : "IsCalendarDate"
+			"yearmonthday" : "IsCalendarDate",
+			"yearquarter" : "IsCalendarYearQuarter",
+			"yearweek" : "IsCalendarYearWeek"
 		},
 		// maps V2 filter-restriction value to corresponding V4 FilterExpressionType enum value
 		mFilterRestrictions = {
@@ -193,7 +197,7 @@ sap.ui.define([
 		 * @param {object} oProperty
 		 *   the property of the entity
 		 * @param {object} oEntitySet
-		 *   the entity set to which the corresponding V4 annotations needs to be added
+		 *   the entity set to which the corresponding V4 annotations need to be added
 		 */
 		addFilterRestriction : function (oProperty, oEntitySet) {
 			var aFilterRestrictions,
@@ -220,6 +224,37 @@ sap.ui.define([
 			});
 			oEntitySet["com.sap.vocabularies.Common.v1.FilterExpressionRestrictions"] =
 				aFilterRestrictions;
+		},
+
+		/**
+		 * Adds a V4 navigation restriction annotation with a filter restriction to the given entity
+		 * set for the given navigation property with the V2 annotation
+		 * <code>sap:filterable="false"</code>.
+		 *
+		 * @param {object} oNavigationProperty
+		 *   the navigation property of the entity with the V2 annotation
+		 *   <code>sap:filterable="false"</code>
+		 * @param {object} oEntitySet
+		 *   the entity set to which the corresponding V4 annotation needs to be added
+		 */
+		addNavigationFilterRestriction : function (oNavigationProperty, oEntitySet) {
+			var oNavigationRestrictions =
+					oEntitySet["Org.OData.Capabilities.V1.NavigationRestrictions"] || {};
+
+			oNavigationRestrictions.RestrictedProperties =
+				oNavigationRestrictions.RestrictedProperties || [];
+
+			oNavigationRestrictions.RestrictedProperties.push({
+				"FilterRestrictions" : {
+					"Filterable": oBoolFalse
+				},
+				"NavigationProperty" : {
+					"NavigationPropertyPath" : oNavigationProperty.name
+				}
+			});
+
+			oEntitySet["Org.OData.Capabilities.V1.NavigationRestrictions"] =
+				oNavigationRestrictions;
 		},
 
 		/**
@@ -268,6 +303,12 @@ sap.ui.define([
 					if (!sV2Semantics) {
 						return;
 					}
+
+					if (sV2Semantics === "url") {
+						oProperty["Org.OData.Core.V1.IsURL"] = oBoolTrue;
+						return;
+					}
+
 					if (sV2Semantics in mDatePartSemantics2CommonTerm) {
 						sV4Annotation = "com.sap.vocabularies.Common.v1."
 							+ mDatePartSemantics2CommonTerm[sV2Semantics];
@@ -513,6 +554,8 @@ sap.ui.define([
 			if (oEntityType.navigationProperty) {
 				oEntityType.navigationProperty.forEach(function (oNavigationProperty) {
 					if (oNavigationProperty["sap:filterable"] === "false") {
+						Utils.addNavigationFilterRestriction(oNavigationProperty, oEntitySet);
+						// keep deprecated conversion for compatibility reasons
 						Utils.addPropertyToAnnotation("sap:filterable", oEntitySet,
 							oNavigationProperty);
 					}
@@ -522,32 +565,30 @@ sap.ui.define([
 		},
 
 		/**
-		 * Returns the index of the object inside the given array, where the property with the
+		 * Returns the index of the first object inside the given array, where the property with the
 		 * given name has the given expected value.
 		 *
-		 * @param {object[]} aArray
+		 * @param {object[]} [aArray]
 		 *   some array
 		 * @param {any} vExpectedPropertyValue
 		 *   expected value of the property with given name
 		 * @param {string} [sPropertyName="name"]
 		 *   some property name
 		 * @returns {number}
-		 *   the index of the object found or <code>-1</code> if no such object is found
+		 *   the index of the first object found or <code>-1</code> if no such object is found
 		 */
 		findIndex : function (aArray, vExpectedPropertyValue, sPropertyName) {
-			var iIndex = -1;
+			var i, n;
 
 			sPropertyName = sPropertyName || "name";
 			if (aArray) {
-				aArray.forEach(function (oObject, i) {
-					if (oObject[sPropertyName] === vExpectedPropertyValue) {
-						iIndex = i;
-						return false; // break
+				for (i = 0, n = aArray.length; i < n; i++) {
+					if (aArray[i][sPropertyName] === vExpectedPropertyValue) {
+						return i;
 					}
-				});
+				}
 			}
-
-			return iIndex;
+			return -1;
 		},
 
 		/**
@@ -699,7 +740,7 @@ sap.ui.define([
 		 * "com.sap.vocabularies.Communication.v1.PhoneType/fax".
 		 *
 		 * @param {string} sSemantics
-		 *   the sap:semantivs value ("tel" or "email")
+		 *   the sap:semantics value ("tel" or "email")
 		 * @param {string} sTypesList
 		 *   the comma-separated list of types for sap:semantics
 		 * @param {object} oProperty
@@ -911,11 +952,19 @@ sap.ui.define([
 				return;
 			}
 			aSchemas.forEach(function (oSchema, i) {
+				var sSchemaVersion;
+
 				// remove datajs artefact for inline annotations in $metadata
 				delete oSchema.annotations;
 
 				Utils.liftSAPData(oSchema);
 				oSchema.$path = "/dataServices/schema/" + i;
+				sSchemaVersion = oSchema["sap:schema-version"];
+				if (sSchemaVersion) {
+					oSchema["Org.Odata.Core.V1.SchemaVersion"] = {
+						String : sSchemaVersion
+					};
+				}
 				jQuery.extend(oSchema, oAnnotations[oSchema.namespace]);
 
 				Utils.visitParents(oSchema, oAnnotations, "association",

@@ -8,6 +8,10 @@ Feature: Buy a Product
     When on the category: I press on "The first Product"
     When on the product: I add the displayed product to the cart
     When on the category: I go to the cart page
+    Then on the category: I teardown my app
+
+    Given I start my App with the hash "#/cart/HT-1254" keeping local storage
+    Then on the product: I should see the right product
 
     When on the cart: I press on the proceed button
     Then on checkout: I should see the wizard step contents step
@@ -16,16 +20,19 @@ Feature: Buy a Product
     Then on checkout: I should see the wizard step payment type step
 
     When on checkout: I press on the next step button
-    Then on checkout: I should see the credit card step
+    When on checkout: I enter wrong credit card information
+    Then on checkout: I should see the footer with the error button
 
-    When on checkout: I enter credit card text
-    Then on checkout: I should see the step4 button enabled
+    When on checkout: I press on the button in the footer
+    Then on checkout: I should see the message Popover
+
+    When on checkout: I press the close button
+    When on checkout: I enter correct credit card information
+    Then on checkout: I should see the step4 button
 
     When on checkout: I press on the next step button
-    Then on checkout: I should see the billing step
-
-    When on checkout: I enter billing address text
-    Then on checkout: I should see the step5 button validated
+    When on checkout: I enter invoice address
+    Then on checkout: I should see the step5 button
 
     When on checkout: I press on the next step button
     Then on checkout: I should see the delivery type step
@@ -38,13 +45,13 @@ Feature: Buy a Product
 
     When on checkout: I press on the bank transfer button
     When on checkout: I press on the yes button
-    Then on checkout: I should see the step3 button enabled
+    Then on checkout: I should see the step3 button
 
     When on checkout: I press on the next step button
-    Then on checkout: I should see the step4 button enabled
+    Then on checkout: I should see the step4 button
 
     When on checkout: I press on the next step button
-    Then on checkout: I should see the step5 button enabled
+    Then on checkout: I should see the step5 button
 
     When on checkout: I press on the next step button
     Then on checkout: I should see the delivery type step
@@ -57,19 +64,14 @@ Feature: Buy a Product
 
     When on checkout: I press on the cash on delivery button
     When on checkout: I press on the yes button
-    Then on checkout: I should see the step3 button enabled
+    Then on checkout: I should see the step3 button
 
     When on checkout: I press on the next step button
-    Then on checkout: I should see the cash on delivery step
-
-    When on checkout: I enter cash on delivery text
-    Then on checkout: I should see the step4 button enabled
+    When on checkout: I enter correct cash on delivery info
+    Then on checkout: I should see the step4 button
 
     When on checkout: I press on the next step button
-    Then on checkout: I should see the billing step
-
-    When on checkout: I enter billing address text
-    Then on checkout: I should see the step5 button validated
+    Then on checkout: I should see the step5 button
 
     When on checkout: I press on the next step button
     Then on checkout: I should see the delivery type step
@@ -77,19 +79,19 @@ Feature: Buy a Product
     When on checkout: I press on the next step button
     Then on checkout: I should see the order summary
 
-    When on checkout: I press on the edit button back to billing address
+    When on checkout: I press on the edit button back to invoice address
     Then on checkout: I should see the wizard step contents step
 
-    When on checkout: I check different address text
+    When on checkout: I press on different address checkbox
     When on checkout: I press on the yes button
     When on checkout: I press on the next step button
     Then on checkout: I should see the delivery address step
 
     When on checkout: I enter delivery address text
-    Then on checkout: I should see the step6 button validated
+    Then on checkout: I should see the step6 button
 
     When on checkout: I press on the next step button
-    Then on checkout: I should see the delivery type step
+    Then on checkout: I should see the delivery address step
 
     When on checkout: I press on the next step button
     Then on checkout: I should see the order summary

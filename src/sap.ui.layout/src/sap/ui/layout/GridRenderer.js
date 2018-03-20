@@ -1,9 +1,13 @@
 /*!
  * ${copyright}
  */
-sap.ui.define(['jquery.sap.global'],
-	function(jQuery) {
+sap.ui.define(["sap/ui/Device", "sap/ui/layout/library"],
+	function(Device, library) {
 	"use strict";
+
+
+	// shortcut for sap.ui.layout.GridPosition
+	var GridPosition = library.GridPosition;
 
 
 	/**
@@ -34,7 +38,7 @@ sap.ui.define(['jquery.sap.global'],
 		oRm.writeControlData(oControl);
 		oRm.addClass("sapUiRespGrid");
 
-		var  sMedia = oControl._getCurrentMediaContainerRange(sap.ui.Device.media.RANGESETS.SAP_STANDARD_EXTENDED).name;
+		var  sMedia = oControl._getCurrentMediaContainerRange(Device.media.RANGESETS.SAP_STANDARD_EXTENDED).name;
 		oRm.addClass("sapUiRespGridMedia-Std-" + sMedia);
 
 		var fHSpacing = oControl.getHSpacing();
@@ -60,9 +64,9 @@ sap.ui.define(['jquery.sap.global'],
 		var sPosition = oControl.getPosition();
 		if (sPosition) {
 			sPosition = sPosition.toUpperCase();
-			if (sPosition === sap.ui.layout.GridPosition.Center.toUpperCase()) {
+			if (sPosition === GridPosition.Center.toUpperCase()) {
 				oRm.addClass("sapUiRespGridPosCenter");
-			} else if (sPosition === sap.ui.layout.GridPosition.Right.toUpperCase()) {
+			} else if (sPosition === GridPosition.Right.toUpperCase()) {
 				oRm.addClass("sapUiRespGridPosRight");
 			}
 		}
@@ -119,6 +123,10 @@ sap.ui.define(['jquery.sap.global'],
 			oRm.write("<div");
 			var oLay = oControl._getLayoutDataForControl(aItems[i]);
 			var bCellSpanXLChanged = false;
+
+			if (!aItems[i].getVisible()) {
+				oRm.addClass("sapUiRespGridSpanInvisible");
+			}
 
 			if (oLay) {
 
@@ -292,31 +300,24 @@ sap.ui.define(['jquery.sap.global'],
 				}
 
 
-
-
 				// Visibility
-				var
-				l = oLay.getVisibleL(),
-				m = oLay.getVisibleM(),
-				s = oLay.getVisibleS();
 
-				// TODO: visibility of XL different to L
-
-				if (!l && m && s) {
-					oRm.addClass("sapUiRespGridHiddenL");
+				if (!oLay.getVisibleXL()) {
 					oRm.addClass("sapUiRespGridHiddenXL");
-				} else if (!l && !m && s) {
-					oRm.addClass("sapUiRespGridVisibleS");
-				} else if (l && !m && !s) {
-					oRm.addClass("sapUiRespGridVisibleL");
-					oRm.addClass("sapUiRespGridVisibleXL");
-				} else if (!l && m && !s) {
-					oRm.addClass("sapUiRespGridVisibleM");
-				} else if (l && !m && s) {
+				}
+
+				if (!oLay.getVisibleL()) {
+					oRm.addClass("sapUiRespGridHiddenL");
+				}
+
+				if (!oLay.getVisibleM()) {
 					oRm.addClass("sapUiRespGridHiddenM");
-				} else if (l && m && !s) {
+				}
+
+				if (!oLay.getVisibleS()) {
 					oRm.addClass("sapUiRespGridHiddenS");
 				}
+
 
 				// Move - moveBackwards shifts a grid element to the left in LTR mode and
 				// opposite in RTL mode

@@ -5,7 +5,7 @@
 			"fileName":"id_1445501120486_25",
 			"fileType":"change",
 			"changeType":"hideControl",
-			"component":"sap.ui.rta.test.Demo.md.Component",
+			"reference":"sap.ui.rta.test.Demo.md.Component",
 			"packageName":"$TMP",
 			"content":{},
 			"selector":{
@@ -28,7 +28,7 @@
 			"fileName":"id_1445501120486_26",
 			"fileType":"change",
 			"changeType":"hideControl",
-			"component":"sap.ui.rta.test.Demo.md.Component",
+			"reference":"sap.ui.rta.test.Demo.md.Component",
 			"packageName":"$TMP",
 			"content":{},
 			"selector":{
@@ -51,7 +51,7 @@
 			"fileName":"id_1445501120486_27",
 			"fileType":"change",
 			"changeType":"hideControl",
-			"component":"sap.ui.rta.test.Demo.md.Component",
+			"reference":"sap.ui.rta.test.Demo.md.Component",
 			"packageName":"$TMP",
 			"content":{},
 			"selector":{
@@ -72,19 +72,17 @@
 	],
 	"variantSection" : {
 		"idMain1--variantManagementOrdersTable" : {
-			"defaultVariant" : "variant0",
 			"variants" : [
 				{
 					"content": {
 						"fileName":"variant0",
-						"title":"variant A",
-						"fileType":"variant",
+						"fileType":"ctrl_variant",
 						"variantManagementReference": "idMain1--variantManagementOrdersTable",
-						"component":"sap.ui.rta.test.Demo.md.Component",
+						"variantReference":"",
+						"reference":"sap.ui.rta.test.Demo.md.Component",
 						"packageName":"$TMP",
-						"content":{},
-						"selector":{
-							"id":"RTADemoAppMD---detail--GroupElementDatesShippingStatus"
+						"content":{
+							"title":"variant A"
 						},
 						"layer":"CUSTOMER",
 						"texts":{},
@@ -98,19 +96,19 @@
 							"user":""
 						}
 					},
-					"changes" : [
+					"controlChanges" : [
 						{
 							"variantReference":"variant0",
 							"fileName":"id_1445501120486_41",
 							"fileType":"change",
-							"changeType":"hideControl",
+							"reference":"hideControl",
 							"component":"sap.ui.rta.test.Demo.md.Component",
 							"packageName":"$TMP",
 							"content":{},
 							"selector":{
 								"id":"RTADemoAppMD---detail--GroupElementDatesShippingStatus"
 							},
-							"layer":"CUSTOMER",
+							"layer":"VENDOR",
 							"texts":{},
 							"namespace":"sap.ui.rta.test.Demo.md.Component",
 							"creation":"",
@@ -127,7 +125,7 @@
 							"fileName":"id_1445501120486_42",
 							"fileType":"change",
 							"changeType":"hideControl",
-							"component":"sap.ui.rta.test.Demo.md.Component",
+							"reference":"sap.ui.rta.test.Demo.md.Component",
 							"packageName":"$TMP",
 							"content":{},
 							"selector":{
@@ -145,21 +143,22 @@
 								"user":""
 							}
 						}
-					]
+					],
+					"variantChanges": {
+						"setTitle": []
+					}
 				},
 				{
 					"content": {
 						"fileName":"idMain1--variantManagementOrdersTable",
-						"title":"Standard",
-						"fileType":"variant",
+						"fileType":"ctrl_variant",
 						"variantManagementReference":"idMain1--variantManagementOrdersTable",
-						"component":"sap.ui.rta.test.Demo.md.Component",
+						"variantReference":"",
+						"reference":"sap.ui.rta.test.Demo.md.Component",
 						"packageName":"$TMP",
-						"content":{},
-						"selector":{
-							"id":"RTADemoAppMD---detail--GroupElementDatesShippingStatus"
+						"content":{
+							"title":"Standard"
 						},
-						"layer":"CUSTOMER",
 						"texts":{},
 						"namespace":"sap.ui.rta.test.Demo.md.Component",
 						"creation":"",
@@ -171,19 +170,19 @@
 							"user":"SAP"
 						}
 					},
-					"changes" : [
+					"controlChanges" : [
 						{
 							"variantReference":"idMain1--variantManagementOrdersTable",
 							"fileName":"id_1445501120486_41",
 							"fileType":"change",
 							"changeType":"hideControl",
-							"component":"sap.ui.rta.test.Demo.md.Component",
+							"reference":"sap.ui.rta.test.Demo.md.Component",
 							"packageName":"$TMP",
 							"content":{},
 							"selector":{
 								"id":"RTADemoAppMD---detail--GroupElementDatesShippingStatus"
 							},
-							"layer":"CUSTOMER",
+							"layer":"VENDOR",
 							"texts":{},
 							"namespace":"sap.ui.rta.test.Demo.md.Component",
 							"creation":"",
@@ -200,13 +199,13 @@
 							"fileName":"id_1445501120486_43",
 							"fileType":"change",
 							"changeType":"hideControl",
-							"component":"sap.ui.rta.test.Demo.md.Component",
+							"reference":"sap.ui.rta.test.Demo.md.Component",
 							"packageName":"$TMP",
 							"content":{},
 							"selector":{
 								"id":"RTADemoAppMD---detail--GroupElementDatesShippingStatus"
 							},
-							"layer":"CUSTOMER",
+							"layer":"VENDOR",
 							"texts":{},
 							"namespace":"sap.ui.rta.test.Demo.md.Component",
 							"creation":"",
@@ -218,21 +217,23 @@
 								"user":""
 							}
 						}
-					]
+					],
+					"variantChanges": {
+						"setTitle": []
+					}
 				},
 				{
 					"content": {
 						"fileName":"variant2",
-						"title":"variant AA",
-						"fileType":"variant",
+						"fileType":"ctrl_variant",
 						"variantManagementReference":"idMain1--variantManagementOrdersTable",
-						"component":"sap.ui.rta.test.Demo.md.Component",
+						"variantReference":"",
+						"reference":"sap.ui.rta.test.Demo.md.Component",
 						"packageName":"$TMP",
-						"content":{},
-						"selector":{
-							"id":"RTADemoAppMD---detail--GroupElementDatesShippingStatus"
+						"content":{
+							"title":"variant AA"
 						},
-						"layer":"CUSTOMER",
+						"layer":"VENDOR",
 						"texts":{},
 						"namespace":"sap.ui.rta.test.Demo.md.Component",
 						"creation":"",
@@ -244,7 +245,7 @@
 							"user":""
 						}
 					},
-					"changes" : [
+					"controlChanges" : [
 						{
 							"variantReference":"variant2",
 							"fileName": "id_1500543015867_80_moveControls",
@@ -281,10 +282,10 @@
 								}
 							},
 							"selector": {
-								"id": "idMain1--ObjectPageLayout",
+								"id": "idMain1--ObjectPageSectionWithForm",
 								"idIsLocal": true
 							},
-							"layer": "CUSTOMER",
+							"layer": "VENDOR",
 							"texts": {},
 							"namespace": "apps/sap.ui.rta.test.variantManagement/changes/",
 							"creation": "2017-07-20T09:30:18.109Z",
@@ -356,7 +357,10 @@
 								"from": "1.0.0"
 							}
 						}
-					]
+					],
+					"variantChanges": {
+						"setTitle": []
+					}
 				}
 			]
 		}

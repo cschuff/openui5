@@ -2,6 +2,7 @@
  * ${copyright}
  */
 sap.ui.require([
+	"sap/m/MessageBox",
 	"sap/ui/model/Filter",
 	"sap/ui/model/FilterOperator",
 	"sap/ui/model/odata/ODataUtils",
@@ -11,13 +12,15 @@ sap.ui.require([
 	"sap/ui/test/matchers/Interactable",
 	"sap/ui/test/matchers/Properties"
 ],
-function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactable, Properties) {
+function (MessageBox, Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactable,
+		Properties) {
 	"use strict";
-	var GROSS_AMOUNT_COLUMN_INDEX = 2,
+	var COMPANY_NAME_COLUMN_INDEX = 1,
+		GROSS_AMOUNT_COLUMN_INDEX = 2,
 		ID_COLUMN_INDEX = 0,
 		ITEM_COLUMN_INDEX = 1,
-		NOTE_COLUMN_INDEX = 5,
-		SOITEM_NOTE_COLUMN_INDEX = 10,
+		NOTE_COLUMN_INDEX = 4,
+		SOITEM_NOTE_COLUMN_INDEX = 11,
 		SOITEM_QUANTITY_COLUMN_INDEX = 7,
 		sLastNewNoteValue,
 		sViewName = "sap.ui.core.sample.odata.v4.SalesOrders.Main";
@@ -48,6 +51,26 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 				aControls[0].getButtons()[bConfirm ? 0 : 1].$().tap();
 				Opa5.assert.ok(true, sLog || (bConfirm ? 'Confirm ' : 'Cancel ') + sTitle);
 			}
+		});
+	}
+
+	function selectSalesOrder(oOpa, iIndex, bRememberGrossAmount) {
+		return oOpa.waitFor({
+			controlType : "sap.m.Table",
+			id : "SalesOrders",
+			success : function (oTable) {
+				var oItem = oTable.getItems()[iIndex],
+					oControl = oItem.getCells()[ID_COLUMN_INDEX];
+				oControl.$().tap();
+				Opa5.assert.ok(true, "Sales Order selected: " +
+					oControl.getText());
+				if (bRememberGrossAmount) {
+					sap.ui.test.Opa.getContext().GrossAmount =
+						oItem.getCells()[GROSS_AMOUNT_COLUMN_INDEX]
+							.getBinding("text").getValue();
+				}
+			},
+			viewName : sViewName
 		});
 	}
 
@@ -156,6 +179,17 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 						viewName : sViewName
 					});
 				},
+				changeNoteInDetails : function (sValue) {
+					return this.waitFor({
+						actions : new EnterText({ clearTextFirst : true, text : sValue }),
+						controlType : "sap.m.Input",
+						id : "Note",
+						success : function (oInput) {
+							Opa5.assert.ok(true, "Details Note text set to " + sValue);
+						},
+						viewName : sViewName
+					});
+				},
 				changeSalesOrderLineItemNote : function (iRow, sNewNoteValue) {
 					return this.waitFor({
 						controlType : "sap.m.Table",
@@ -179,7 +213,35 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 
 							oRow.getCells()[SOITEM_QUANTITY_COLUMN_INDEX].setValue(sNewQuantity);
 							Opa5.assert.ok(true,
-								"SO Item Note of row " + iRow + " set to " + sNewQuantity);
+								"SO Item Quantity of row " + iRow + " set to " + sNewQuantity);
+						},
+						viewName : sViewName
+					});
+				},
+				createInvalidSalesOrderViaAPI : function () {
+					return this.waitFor({
+						controlType : "sap.m.Table",
+						id : "SalesOrders",
+						success : function (oTable) {
+							var oNewContext = oTable.getBinding("items").create({
+								"SalesOrderID" : "",
+								// properties
+								"BuyerID" : "0100000000",
+								"ChangedAt" : "1970-01-01T00:00:00Z",
+								"CreatedAt" : "1970-01-01T00:00:00Z",
+								"CurrencyCode" : "EUR",
+								"GrossAmount" : "0.00",
+								"LifecycleStatus" : "N",
+								"LifecycleStatusDesc" : "New",
+								"Note" : "RAISE_ERROR",
+								"NoteLanguage" : "E",
+								// navigation property
+								"SO_2_BP" : null
+							});
+						oNewContext.created().then(function() {
+							MessageBox.success("SalesOrder created: " +
+								oNewContext.getProperty("SalesOrderID"));
+							});
 						},
 						viewName : sViewName
 					});
@@ -197,6 +259,25 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 						actions : new Press(),
 						controlType : "sap.m.Button",
 						id : "deleteSalesOrderLineItem",
+						viewName : sViewName
+					});
+				},
+				deleteSelectedSalesOrderViaGroupId : function (sGroupId) {
+					return this.waitFor({
+						controlType : "sap.m.Table",
+						id : "SalesOrders",
+						success : function (oSalesOrderTable) {
+							var oSalesOrderContext = oSalesOrderTable.getSelectedItem()
+									.getBindingContext(),
+								sOrderID = oSalesOrderContext.getProperty("SalesOrderID", true);
+							oSalesOrderContext["delete"](sGroupId).then(function () {
+									Opa5.assert.ok(true, "Deleted Sales Order: " + sOrderID);
+								}, function (oError) {
+									Opa5.assert.ok(false, "Error deleting Sales Order: " + sOrderID
+										+ " Error: " + oError);
+								}
+							);
+						},
 						viewName : sViewName
 					});
 				},
@@ -274,7 +355,7 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 							// filter for SOItem with Product ID from 2nd row
 							oSOItemsTable.getBinding("items")
 								.changeParameters({
-									$filter : "Product/ProductID eq '" + sProductID + "'"
+									$filter : "ProductID eq '" + sProductID + "'"
 								});
 							Opa5.assert.ok(true, "Filter by ProductID with changeParameters:"
 								+ sProductID);
@@ -289,7 +370,7 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 						success : function (oSalesOrderItemsTable) {
 							// Note: filter cannot be triggered via UI; field is disabled
 							oSalesOrderItemsTable.getBinding("items")
-								.filter(new Filter("Product/ProductID", FilterOperator.EQ, sValue));
+								.filter(new Filter("ProductID", FilterOperator.EQ, sValue));
 						},
 						viewName : sViewName
 					});
@@ -306,7 +387,7 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 								sSalesOrderId = oCore.byId(sViewName).byId("SalesOrders")
 									.getItems()[0].getCells()[0].getText();
 							sap.ui.test.Opa.getContext().firstSalesOrderId = sSalesOrderId;
-							Opa5.assert.ok(true, "First SalesOrderID " + sSalesOrderId);
+							Opa5.assert.ok(true, "First SalesOrderID: " + sSalesOrderId);
 
 						},
 						viewName : sViewName
@@ -321,7 +402,7 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 								=== sap.ui.test.Opa.getContext().firstSalesOrderId;
 						},
 						success : function (oSalesOrderTable) {
-							Opa5.assert.ok(true, "First SalesOrderID " +
+							Opa5.assert.ok(true, "First SalesOrderID: " +
 								oSalesOrderTable.getItems()[0].getCells()[0].getText());
 						},
 						viewName : sViewName
@@ -371,12 +452,23 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 						viewName : sViewName
 					});
 				},
+				pressDeleteBusinessPartnerButton : function () {
+					return this.waitFor({
+						actions : new Press(),
+						controlType : "sap.m.Button",
+						id : "deleteBusinessPartner",
+						success : function (oDeleteBusinessPartnerButton) {
+							Opa5.assert.ok(true, "Delete Business Partner button pressed");
+						},
+						viewName : sViewName
+					});
+				},
 				pressRefreshAllButton : function () {
 					return this.waitFor({
 						actions : new Press(),
 						controlType : "sap.m.Button",
 						id : "refreshAll",
-						success : function (aControls) {
+						success : function () {
 							Opa5.assert.ok(true, "Refresh All pressed");
 						},
 						viewName : sViewName
@@ -387,17 +479,33 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 						actions : new Press(),
 						controlType : "sap.m.Button",
 						id : "refreshSalesOrders",
-						success : function (aControls) {
+						success : function () {
 							Opa5.assert.ok(true, "Refresh Sales Orders pressed");
 						},
 						viewName : sViewName
 					});
 				},
+
+				pressRefreshSelectedSalesOrdersButton : function () {
+					return this.waitFor({
+						actions : new Press(),
+						controlType : "sap.m.Button",
+						id : "refreshSelectedSalesOrder",
+						success : function () {
+							Opa5.assert.ok(true, "Refresh selected Sales Order pressed");
+						},
+						viewName : sViewName
+					});
+				},
+
 				pressSaveSalesOrderButton : function () {
 					return this.waitFor({
 						actions : new Press(),
 						controlType : "sap.m.Button",
 						id : "saveSalesOrder",
+						success : function () {
+							Opa5.assert.ok(true, "Save Sales Order pressed");
+						},
 						viewName : sViewName
 					});
 				},
@@ -406,6 +514,9 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 						actions : new Press(),
 						controlType : "sap.m.Button",
 						id : "saveSalesOrders",
+						success : function () {
+							Opa5.assert.ok(true, "Save Sales Orders pressed");
+						},
 						viewName : sViewName
 					});
 				},
@@ -458,7 +569,9 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 							if (!sap.ui.test.Opa.getContext().aOrderIds) {
 								sap.ui.test.Opa.getContext().aOrderIds = [];
 							}
-							sap.ui.test.Opa.getContext().aOrderIds.push(sSalesOrderId);
+							if (sap.ui.test.Opa.getContext().aOrderIds.indexOf(sSalesOrderId) < 0) {
+								sap.ui.test.Opa.getContext().aOrderIds.push(sSalesOrderId);
+							}
 
 							Opa5.assert.ok(true, "SalesOrderID remembered:" + sSalesOrderId);
 						}
@@ -475,24 +588,11 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 						viewName : sViewName
 					});
 				},
-				selectFirstSalesOrder : function (bRememberGrossAmount) {
-					return this.waitFor({
-						controlType : "sap.m.Table",
-						id : "SalesOrders",
-						success : function (oTable) {
-							var oFirstItem = oTable.getItems()[0],
-								oControl = oFirstItem.getCells()[ID_COLUMN_INDEX];
-							oControl.$().tap();
-							Opa5.assert.ok(true, "First Sales Order selected: " +
-								oControl.getText());
-							if (bRememberGrossAmount) {
-								sap.ui.test.Opa.getContext().GrossAmount =
-									oFirstItem.getCells()[GROSS_AMOUNT_COLUMN_INDEX]
-										.getBinding("text").getValue();
-							}
-						},
-						viewName : sViewName
-					});
+				selectFirstSalesOrder : function ( bRememberGrossAmount) {
+					return selectSalesOrder(this, 0, bRememberGrossAmount);
+				},
+				selectSalesOrder : function (iIndex) {
+					return selectSalesOrder(this, iIndex);
 				},
 				selectSalesOrderItemWithPosition : function (sPosition) {
 					return this.waitFor({
@@ -605,7 +705,7 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 
 							Opa5.assert.notStrictEqual(oRow.getCells()[ID_COLUMN_INDEX].getText(),
 								sExpectedID,
-								"ID of row " + iRow + " is not \"" + sExpectedID + "\"");
+								"ID of row " + iRow + " is not: " + sExpectedID);
 						},
 						viewName : sViewName
 					});
@@ -661,11 +761,21 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 									Opa5.assert.strictEqual(
 										oRow.getCells()[ID_COLUMN_INDEX].getText(),
 										sExpectedID,
-										"ID of row " + iRow + " as expected \""
-											+ sExpectedID + "\"");
+										"ID of row " + iRow + " as expected: " + sExpectedID);
 								},
 								viewName : sViewName
 							});
+						},
+						viewName : sViewName
+					});
+				},
+				checkInputValue : function (sID, sValue) {
+					return this.waitFor({
+						controlType : "sap.m.Input",
+						id : sID,
+						success : function (oInput) {
+							Opa5.assert.strictEqual(oInput.getValue(),
+								sValue, "checkInputValue('" + sID + "', '" + sValue + "')");
 						},
 						viewName : sViewName
 					});
@@ -679,6 +789,19 @@ function (Filter, FilterOperator, ODataUtils, Opa5, EnterText, Press, Interactab
 
 							Opa5.assert.strictEqual(oRow.getCells()[3].getText(),
 								sExpectProductName, "Product name of new created SOItem");
+						},
+						viewName : sViewName
+					});
+				},
+				checkCompanyName : function (iRow, sExpectedCompanyName) {
+					return this.waitFor({
+						controlType : "sap.m.Table",
+						id : "SalesOrders",
+						success : function (oSalesOrderTable) {
+							Opa5.assert.strictEqual(oSalesOrderTable.getItems()[iRow].getCells()
+								[COMPANY_NAME_COLUMN_INDEX].getText(), sExpectedCompanyName,
+								"CompanyName of row " + iRow + " as expected "
+									+ sExpectedCompanyName);
 						},
 						viewName : sViewName
 					});

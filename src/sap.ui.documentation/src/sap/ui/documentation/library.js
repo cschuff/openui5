@@ -11,6 +11,23 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/util/LibraryInfo',
 
 	'use strict';
 
+	// delegate further initialization of this library to the Core
+	sap.ui.getCore().initLibrary({
+		name : 'sap.ui.documentation',
+		version: '${version}',
+		dependencies : ['sap.ui.core','sap.m'],
+		types: [],
+		interfaces: [],
+		controls: [
+			"sap.ui.documentation.sdk.controls.Search",
+			"sap.ui.documentation.sdk.controls.ObjectPageSubSection",
+			"sap.ui.documentation.sdk.controls.LightTable",
+			"sap.ui.documentation.sdk.controls.Row"
+		],
+		elements: [],
+		noLibraryCSS: true
+	});
+
 	/**
 	 * SAPUI5 library with controls specialized for administrative applications.
 	 *
@@ -20,23 +37,18 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/util/LibraryInfo',
 	 * @version ${version}
 	 * @public
 	 */
-
-	// delegate further initialization of this library to the Core
-	sap.ui.getCore().initLibrary({
-		name : 'sap.ui.documentation',
-		version: '${version}',
-		dependencies : ['sap.ui.core','sap.m'],
-		types: [],
-		interfaces: [],
-		controls: [
-			"sap.ui.documentation.sdk.controls.Search"
-		],
-		elements: []
-	});
-
 	var thisLibrary = sap.ui.documentation;
 
 	var _libraryInfoSingleton;
+
+	thisLibrary._getLicense = function () {
+		var sUrl = "./LICENSE.txt";
+
+		return jQuery.ajax({
+			url: sUrl,
+			dataType: "text"
+		});
+	};
 
 	thisLibrary._getAppInfo = function(fnCallback) {
 		var sUrl = sap.ui.resource("", "sap-ui-version.json");

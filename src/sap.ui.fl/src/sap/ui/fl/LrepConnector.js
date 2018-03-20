@@ -12,7 +12,7 @@ sap.ui.define([
 	 *
 	 * @param {object} [mParameters] - map of parameters, see below
 	 * @param {String} [mParameters.XsrfToken] - XSRF token which can be reused for back-end connectivity. If no XSRF token is passed, a new one
-	 *        will be fetched from back end.
+	 *		will be fetched from back end.
 	 * @constructor
 	 * @alias sap.ui.fl.LrepConnector
 	 * @private
@@ -33,7 +33,7 @@ sap.ui.define([
 		return new Connector(mParameters);
 	};
 
-	Connector.prototype.DEFAULT_CONTENT_TYPE = "application/json";
+	Connector.prototype.DEFAULT_CONTENT_TYPE = "application/json; charset=utf-8";
 	Connector.prototype._sClient = undefined;
 	Connector.prototype._sLanguage = undefined;
 	Connector.prototype._aSentRequestListeners = [];
@@ -146,6 +146,8 @@ sap.ui.define([
 		var mOptions;
 		if (!sContentType) {
 			sContentType = this.DEFAULT_CONTENT_TYPE;
+		} else if (sContentType.indexOf("charset") === -1) {
+			sContentType += "; charset=utf-8";
 		}
 
 		mOptions = jQuery.extend(true, this._getDefaultHeader(), {
@@ -161,7 +163,7 @@ sap.ui.define([
 			}
 		});
 
-		if (oData && mOptions.contentType === "application/json") {
+		if (oData && mOptions.contentType.indexOf("application/json") === 0) {
 			mOptions.dataType = "json";
 			if (typeof oData === "object") {
 				mOptions.data = JSON.stringify(oData);
@@ -308,10 +310,10 @@ sap.ui.define([
 					} else {
 						var result;
 						result = {
-							status: "error"
+							status: "error",
+							code: oXhr.statusCode().status,
+							messages: that._getMessagesFromXHR(oXhr)
 						};
-						result.code = oXhr.statusCode().status;
-						result.messages = that._getMessagesFromXHR(oXhr);
 						reject(result);
 					}
 				}
@@ -322,9 +324,7 @@ sap.ui.define([
 			if (mOptions && mOptions.type) {
 				if (mOptions.type === "GET" || mOptions.type === "HEAD") {
 					bRequestCSRFToken = false;
-				}
-			} else {
-				if (that._sXsrfToken && that._sXsrfToken !== "fetch") {
+				} else if (that._sXsrfToken && that._sXsrfToken !== "fetch") {
 					bRequestCSRFToken = false;
 				}
 			}
@@ -334,7 +334,9 @@ sap.ui.define([
 				jQuery.ajax(sFetchXsrfTokenUrl, mFetchXsrfTokenOptions).done(fetchTokenAndHandleRequest).fail(function(oXhr, sStatus, sErrorThrown) {
 					// Fetching XSRF Token failed
 					reject({
-						status: "error"
+						status: "error",
+						code: oXhr.statusCode().status,
+						messages: that._getMessagesFromXHR(oXhr)
 					});
 				});
 			} else {
@@ -362,13 +364,12 @@ sap.ui.define([
 	 * @public
 	 */
 	Connector.prototype.loadChanges = function(oComponent, mPropertyBag) {
-		var that = this;
 		var mOptions = {};
 		var sComponentName = oComponent.name;
 		var sUrl = "/sap/bc/lrep/flex/data/";
 		mPropertyBag = mPropertyBag || {};
 
-		if (!sComponentName) {
+		if (!sComponentName || sComponentName.match(new RegExp(/^\$*\{[a-zA-Z0-9\.]*\}/g))) {
 			return Promise.reject(new Error("Component name not specified"));
 		}
 
@@ -414,6 +415,9 @@ sap.ui.define([
 		}
 
 		if (oComponent.appVersion && (oComponent.appVersion !== FlexUtils.DEFAULT_APP_VERSION)) {
+			if (oComponent.appVersion.match(new RegExp(/^\$*\{[a-zA-Z0-9\.]*\}/g))) {
+				return Promise.reject(new Error("Component appVersion is invalid"));
+			}
 			sUrl += "&appVersion=" + oComponent.appVersion;
 		}
 
@@ -424,16 +428,12 @@ sap.ui.define([
 			.then(function(oResponse) {
 				return {
 					changes: oResponse.response,
+					messagebundle: oResponse.response.messagebundle,
 					componentClassName: sComponentName,
 					etag: oResponse.etag
 				};
 			}, function(oError) {
-				if (oError.code === 404 || oError.code === 405) {
-					// load changes based old route, because new route is not implemented
-					return that._loadChangesBasedOnOldRoute(sComponentName);
-				} else {
-					throw (oError);
-				}
+				throw (oError);
 			});
 	};
 
@@ -454,36 +454,6 @@ sap.ui.define([
 			.then(function(oResponse) {
 				return oResponse.response;
 			});
-	};
-
-	Connector.prototype._loadChangesBasedOnOldRoute = function(sComponentClassName) {
-		var resourceName, params;
-
-		try {
-			resourceName = jQuery.sap.getResourceName(sComponentClassName, "-changes.json");
-		} catch (e) {
-			return Promise.reject(e);
-		}
-
-		params = {
-			async: true,
-			dataType: "json",
-			failOnError: true,
-			headers: {
-				"X-UI5-Component": sComponentClassName
-			}
-		};
-
-		if (this._sClient) {
-			params.headers["sap-client"] = this._sClient;
-		}
-
-		return jQuery.sap.loadResource(resourceName, params).then(function(oResponse) {
-			return {
-				changes: oResponse,
-				componentClassName: sComponentClassName
-			};
-		});
 	};
 
 	/**
@@ -641,7 +611,7 @@ sap.ui.define([
 	 * @param {String} sName Name of the change
 	 * @param {String} sType File type extension
 	 * @param {Boolean} bIsRuntime The stored file content is handed over to the lrep provider that can dynamically adjust the content to the runtime
-	 *        context (e.g. do text replacement to the users' logon language) before
+	 *		context (e.g. do text replacement to the users' logon language) before
 	 * @returns {Object} Returns the result from the request
 	 * @public
 	 */

@@ -167,8 +167,8 @@ sap.ui.define(['jquery.sap.global', './Core', 'sap/ui/thirdparty/URI'],
 				'multiselect-all': 0x1e224, 'multiselect-none': 0x1e225, 'scissors': 0xe226, 'sound': 0x1e227,
 				'sound-loud': 0x1e228, 'sound-off': 0x1e229, 'date-time': 0x1e22a, 'user-settings': 0xe22b,
 				'key-user-settings': 0xe22c, 'developer-settings': 0xe22d, 'text-formatting': 0x1e22e, 'bold-text': 0x1e22f,
-				'italic-text': 0x1e230, 'underline-text': 0x1e231, 'text-align-justified': 0xe232, 'text-align-left': 0xe233,
-				'text-align-center': 0xe234, 'text-align-right': 0xe235, 'bullet-text': 0x1e236, 'numbered-text': 0x1e237,
+				'italic-text': 0x1e230, 'underline-text': 0x1e231, 'text-align-justified': 0x1e232, 'text-align-left': 0x1e233,
+				'text-align-center': 0x1e234, 'text-align-right': 0x1e235, 'bullet-text': 0x1e236, 'numbered-text': 0x1e237,
 				'co': 0xe238, 'ui-notifications': 0xe239, 'bell': 0xe23a, 'cancel-share': 0xe23b,
 				'write-new-document': 0xe23c, 'write-new': 0xe23d, 'cancel': 0x1e23e, 'screen-split-one': 0xe23f,
 				'screen-split-two': 0xe240, 'screen-split-three': 0xe241, 'customize': 0xe242, 'user-edit': 0xe243,
@@ -187,7 +187,7 @@ sap.ui.define(['jquery.sap.global', './Core', 'sap/ui/thirdparty/URI'],
 				'browse-folder': 0xe277, 'primary-key': 0xe278, 'two-keys': 0xe279,
 				'strikethrough': 0xe27a, 'text': 0xe27b, 'responsive': 0xe27c, 'desktop-mobile': 0xe27d,
 				'table-row': 0xe27e, 'table-column': 0xe27f, 'validate': 0x1e280, 'keyboard-and-mouse': 0xe281,
-				'touch': 0xe282
+				'touch': 0xe282, 'expand-all': 0xe283, 'collapse-all': 0xe284
 			}
 		};
 

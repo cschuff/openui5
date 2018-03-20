@@ -6,9 +6,21 @@
   * @typedef {Object} sap.ui.layout.BlockRowColorSets
   * @typedef {Object} sap.ui.layout.BlockLayoutRow
   */
-sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/layout/BlockLayoutCellData'],
-	function(jQuery, Control, library, BlockLayoutCellData) {
+sap.ui.define([
+    'jquery.sap.global',
+    'sap/ui/core/Control',
+    './library',
+    'sap/ui/layout/BlockLayoutCellData',
+    "./BlockLayoutRowRenderer"
+],
+	function(jQuery, Control, library, BlockLayoutCellData, BlockLayoutRowRenderer) {
 		"use strict";
+
+		// shortcut for sap.ui.layout.BlockBackgroundType
+		var BlockBackgroundType = library.BlockBackgroundType;
+
+		// shortcut for sap.ui.layout.BlockRowColorSets
+		var BlockRowColorSets = library.BlockRowColorSets;
 
 		/**
 		 * Constructor for a new BlockLayoutRow.
@@ -68,7 +80,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 					 * @since 1.42
 					 */
 					accentCells: {type: "sap.ui.layout.BlockLayoutCell", multiple: true, singularName: "accentCell"}
-				}
+				},
+				designtime: "sap/ui/layout/designtime/BlockLayoutRow.designtime"
 			}
 		});
 
@@ -101,7 +114,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 		};
 
 		/**
-		 * Changes dynamically row's color set
+		 * Changes dynamically row color set
 		 * Note: this might invalidate cells inside and also change color sets of the other BlockLayoutRow-s below it.
 		 * @public
 		 * @method
@@ -120,7 +133,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 				aParentContent = oBlockLayout && oBlockLayout.getContent(),
 				oPrevBlockRow = (iThisIndexInParent && aParentContent[iThisIndexInParent - 1]) || null,
 				oNextBlockRow = (aParentContent && aParentContent[iThisIndexInParent + 1]) || null,
-				oBlockRowColorSets = sap.ui.layout.BlockRowColorSets,
+				oBlockRowColorSets = BlockRowColorSets,
 				aColorSets = Object.keys(oBlockRowColorSets).map(function (sKey) {
 					return oBlockRowColorSets[sKey];
 				}),
@@ -158,7 +171,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 			var oObject,
 				sId = vId && vId.getId ? vId.getId() : vId,
 				args = Array.prototype.slice.call(arguments),
-				oBackgrounds = sap.ui.layout.BlockBackgroundType,
+				oBackgrounds = BlockBackgroundType,
 				oBlockLayout = this.getParent(),
 				sLayoutBackground = oBlockLayout && (oBlockLayout.getBackground() || "");
 
@@ -225,7 +238,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 		 * @private
 		 * @method
 		 * @param {string} sSizeName The size that needs to be calculated
-		 * @returns {[*]}
+		 * @returns {any[][]}
 		 */
 		BlockLayoutRow.prototype._calcArrangementForSize = function (sSizeName) {
 			var aContent = this.getContent();
@@ -301,7 +314,6 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 			var oBlockLayout, bProcessAccentCells;
 
 			if (!aCells || !aCells.length) {
-				jQuery.sap.log.warning("No accent cells were set");
 				return this;
 			}
 
@@ -315,9 +327,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 				if (bProcessAccentCells && oCell.getId() === sId && oCell.getWidth() === 1) {
 					oCell.addStyleClass("sapContrast").addStyleClass("sapContrastPlus");
 
-					oColorSets = sap.ui.layout.BlockRowColorSets;
-					bUseContrast2 = this._hasStyleClass("sapUiBlockLayoutBackground" + oColorSets.ColorSet1, sap.ui.layout.BlockBackgroundType.Mixed, false, oColorSets.ColorSet1) ||
-						this._hasStyleClass("sapUiBlockLayoutBackground" + oColorSets.ColorSet1, sap.ui.layout.BlockBackgroundType.Mixed, true, oColorSets.ColorSet1);
+					oColorSets = BlockRowColorSets;
+					bUseContrast2 = this._hasStyleClass("sapUiBlockLayoutBackground" + oColorSets.ColorSet1, BlockBackgroundType.Mixed, false, oColorSets.ColorSet1) ||
+						this._hasStyleClass("sapUiBlockLayoutBackground" + oColorSets.ColorSet1, BlockBackgroundType.Mixed, true, oColorSets.ColorSet1);
 
 					if (bUseContrast2) {
 						oCell.addStyleClass("sapUiBlockLayoutBackgroundContrast2");
@@ -349,7 +361,6 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 				aAccentCellsCopy = Array.prototype.slice.call(aAccentCells);
 
 			if (!aAccentCells || !aAccentCells.length) {
-				jQuery.sap.log.warning("No accent cells were set");
 				return this;
 			}
 
@@ -396,8 +407,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 		 * @returns {boolean} Determines if the row contains the class
 		 */
 		BlockLayoutRow.prototype._hasStyleClass = function (sStyleClass, sLayoutBackground, bIsColorInverted, sType) {
-			var oBackgrounds = sap.ui.layout.BlockBackgroundType,
-				oColorSets = sap.ui.layout.BlockRowColorSets,
+			var oBackgrounds = BlockBackgroundType,
+				oColorSets = BlockRowColorSets,
 				i, aStyleClasses, aEqualSets;
 
 			// Check if this is NOT Mixed or Light background and just do the normal check
@@ -435,5 +446,4 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Control', './library', 'sap/ui/
 		};
 
 		return BlockLayoutRow;
-
-	}, /* bExport= */ true);
+	});

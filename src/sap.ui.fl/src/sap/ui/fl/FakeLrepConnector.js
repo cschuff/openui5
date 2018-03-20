@@ -99,8 +99,33 @@ sap.ui.define([
 		return new Promise(function(resolve, reject){
 			handleGetTransports(sUri, sMethod, oData, mOptions, resolve, reject);
 			handleMakeChangesTransportable(sUri, sMethod, oData, mOptions, resolve, reject);
+			handleManifirstSupport(sUri, sMethod, oData, mOptions, resolve, reject);
+			handleResetChanges(sUri, sMethod, oData, mOptions, resolve, reject);
 		});
 	};
+
+	function handleResetChanges(sUri, sMethod, oData, mOptions, resolve) {
+		if (sUri.match(/^\/sap\/bc\/lrep\/changes\//) && sMethod === 'DELETE') {
+			var aUriParameters = [];
+			var regExp = /\?reference=([\w.]+)\&.+\&layer=(\w+)\&generator=([\w.]+)/;
+			aUriParameters = sUri.match(regExp);
+			resolve({
+				response: {
+					"parameters": aUriParameters
+				},
+				status: "success"
+			});
+		}
+	}
+
+	function handleManifirstSupport(sUri, sMethod, oData, mOptions, resolve) {
+		if (sUri.match(/^\/sap\/bc\/ui2\/app_index\/ui5_app_mani_first_supported\//) && sMethod === 'GET') {
+			resolve({
+				response: false,
+				status: "success"
+			});
+		}
+	}
 
 	function handleMakeChangesTransportable(sUri, sMethod, oData, mOptions, resolve){
 		if (sUri.match(/^\/sap\/bc\/lrep\/actions\/make_changes_transportable\//) && sMethod === 'POST'){

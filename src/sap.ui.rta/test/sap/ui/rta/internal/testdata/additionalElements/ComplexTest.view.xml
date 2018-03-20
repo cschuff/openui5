@@ -1,5 +1,6 @@
-<core:View
+<mvc:View
 	xmlns:core="sap.ui.core"
+	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
 	xmlns:smartField="sap.ui.comp.smartfield"
 	xmlns:smartForm="sap.ui.comp.smartform"
@@ -63,6 +64,9 @@
 									<smartForm:GroupElement id="EntityType01.UnboundButton" >
 										<Button text="No Binding"></Button>
 									</smartForm:GroupElement>
+									<smartForm:GroupElement id="EntityType01.CommonProperty" visible="false">
+										<smartField:SmartField value="{CommonPropertyName}" />
+									</smartForm:GroupElement>
 									<smartForm:GroupElement label="Invisible complex property" id="EntityType01.ComplexProperty031.Invisible" visible="false">
 										<smartField:SmartField value="{EntityType01_Complex/ComplexProperty031}" />
 									</smartForm:GroupElement>
@@ -95,6 +99,9 @@
 										<smartField:SmartField value="{EntityType02_Property05}"/>
 										<smartField:SmartField value="{EntityType02_Property06}" visible="false"/>
 									</smartForm:GroupElement>
+									<smartForm:GroupElement id="EntityType02.CommonProperty" visible="false">
+										<smartField:SmartField value="{CommonPropertyName}" />
+									</smartForm:GroupElement>
 									<smartForm:GroupElement label="NavigationLabel01" id="EntityType02.NavigationProperty" visible="false">
 										<smartField:SmartField value="{to_EntityType02Nav/NavProperty}"/>
 									</smartForm:GroupElement>
@@ -109,6 +116,39 @@
 									</smartForm:GroupElement>
 								</smartForm:Group>
 							</smartForm:SmartForm>
+						</uxap:ObjectPageSubSection>
+					</uxap:ObjectPageSection>
+
+					<uxap:ObjectPageSection id="ObjectPageSectionAbsoluteBindingList" title="Object Page Section Absolute Binding">
+						<uxap:ObjectPageSubSection id="ObjectPageSubSectionAbsoluteBinding" >
+							<List id="listWithAbsoluteBinding" items="{/EntityTypes2}">
+								<items>
+									<StandardListItem title="{path: 'EntityType02_Property01'}" description="{path: 'EntityType02_Property02'}" />
+								</items>
+							</List>
+						</uxap:ObjectPageSubSection>
+					</uxap:ObjectPageSection>
+
+					<uxap:ObjectPageSection id="ObjectPageSectionAbsoluteBindingTable" title="Object Page Section Absolute Binding2">
+						<uxap:ObjectPageSubSection id="ObjectPageSubSectionAbsoluteBinding2" >
+							<Table id="tableWithAbsoluteBinding" items="{/EntityTypes2}">
+								<columns>
+									<Column id="Column00">
+										<Text text="{/#EntityTypes2/EntityType02_Property01/@sap:label}" />
+									</Column>
+									<Column id="Column01">
+										<Text text="{/#EntityTypes2/EntityType02_Property02/@sap:label}" />
+									</Column>
+								</columns>
+								<items>
+									<ColumnListItem>
+										<cells>
+											<Text text="{EntityType02_Property01}" />
+											<Text text="{EntityType02_Property02}" />
+										</cells>
+									</ColumnListItem>
+								</items>
+							</Table>
 						</uxap:ObjectPageSubSection>
 					</uxap:ObjectPageSection>
 
@@ -253,4 +293,4 @@
 			</uxap:ObjectPageLayout>
 		</content>
 	</Page>
-</core:View>
+</mvc:View>

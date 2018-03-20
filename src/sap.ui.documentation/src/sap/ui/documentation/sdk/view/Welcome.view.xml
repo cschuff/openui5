@@ -35,26 +35,38 @@
 							text="Discover New Enterprise-Grade Horizons"
 							width="100%"
 							textAlign="Center"/>
-						<Button
-							text="Get Started with UI5"
-							type="Emphasized"
-							press="onGetStarted"
-							class="actionButton"/>
+						<l:HorizontalLayout>
+							<Button
+								text="Get Started with UI5"
+								type="Emphasized"
+								press="onGetStarted"
+								class="actionButton"/>
+							<Button
+								class="actionButton sapContrast sapContrastPlus sapUiSmallMarginBegin"
+								visible="{=${welcomeView>/isOpenUI5} !== undefined}"
+								id="readMoreButton"
+								text="{i18n>downloadButtonText}"
+								type="Ghost"
+								press="onDownloadButtonPress">
+							</Button>
+						</l:HorizontalLayout>
 					</l:VerticalLayout>
 				</l:BlockLayoutCell>
 			</l:BlockLayoutRow>
 
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternA sapUiDemokitLandingBlockHeadline"
+						class="sapUiDemokitLandingBlockHeadline"
+						backgroundColorSet="ColorSet9"
+						backgroundColorShade="ShadeA"
 						title="Key Features"
 						titleAlignment="Center"/>
 			</l:BlockLayoutRow>
 
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
-					backgroundColorSet="ColorSet5"
-					backgroundColorShade="ShadeD">
+						backgroundColorSet="ColorSet5"
+						backgroundColorShade="ShadeD">
 					<l:Grid
 							defaultSpan="L6 M12 S12"
 							hSpacing="0"
@@ -72,6 +84,7 @@
 						</l:VerticalLayout>
 						<Image
 								src="./resources/sap/ui/documentation/sdk/images/Fiori_guidelines_image.png"
+								densityAware="false"
 								width="100%">
 							<layoutData>
 								<l:GridData span="L6 M12 S12"/>
@@ -81,7 +94,8 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternC">
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeD">
 					<l:VerticalLayout
 							width="100%">
 						<custom:TitleLink
@@ -131,7 +145,8 @@
 
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternB">
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB">
 					<l:VerticalLayout
 							width="100%">
 						<custom:TitleLink
@@ -171,7 +186,8 @@
 
 
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternE">
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:Grid
 							defaultSpan="L6 M12 S12"
 							hSpacing="0"
@@ -191,6 +207,7 @@
 						<Image
 								src="./resources/sap/ui/documentation/sdk/images/Fiori_design_examples.png"
 								class="sapUiSmallmarginBeginEnd"
+								densityAware="false"
 								width="100%">
 							<layoutData>
 								<l:GridData span="L6 M12 S12"/>
@@ -204,14 +221,17 @@
 
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternA sapUiDemokitLandingBlockHeadline"
+						backgroundColorSet="ColorSet9"
+						backgroundColorShade="ShadeA"
+						class="sapUiDemokitLandingBlockHeadline"
 						title="Choose Your Scenario"
 						titleAlignment="Center"/>
 			</l:BlockLayoutRow>
 
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternD">
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeD">
 					<l:VerticalLayout
 							width="100%">
 						<custom:TitleLink
@@ -243,11 +263,13 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternC">
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB">
 					<l:VerticalLayout
 							width="100%">
 						<custom:TitleLink
-								href="#/topic/91f346786f4d1014b6dd926db0e91070"
+								href="https://sapui5.hana.ondemand.com/#/topic/91f346786f4d1014b6dd926db0e91070"
+								target="_blank"
 								text="SAPUI5 On-Premise"
 								titleStyle="H2"
 								class="sapUiSmallMarginBottom"/>
@@ -276,7 +298,8 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternB">
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:VerticalLayout
 							width="100%">
 						<custom:TitleLink
@@ -310,7 +333,8 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternC">
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeC">
 					<l:VerticalLayout
 							width="100%">
 						<custom:TitleLink
@@ -346,21 +370,25 @@
 
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
-						class="demokitInitialPagesColorPatternA sapUiDemokitLandingBlockHeadline"
+						class="sapUiDemokitLandingBlockHeadline"
+						backgroundColorSet="ColorSet9"
+						backgroundColorShade="ShadeA"
 						title="Join the Community"
 						titleAlignment="Center"/>
 			</l:BlockLayoutRow>
 
 			<l:BlockLayoutRow>
 				<l:BlockLayoutCell
-						class="sapUiBlockCenteredCell demokitInitialPagesColorPatternB communityLinkCell">
+						class="sapUiBlockCenteredCell communityLinkCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeA">
 					<l:HorizontalLayout>
 						<core:Icon
 								src="sap-icon://collaborate"
 								size="2.5rem"
 								color="Default"/>
 						<custom:TitleLink
-								href="https://www.sap.com/community/tag.html?id=sapui5"
+								href="https://www.sap.com/community/topic/ui5.html?"
 								target="_blank"
 								text="SAP Community"
 								titleStyle="H2"
@@ -370,11 +398,14 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="sapUiBlockCenteredCell demokitInitialPagesColorPatternC communityLinkCell">
+						class="sapUiBlockCenteredCell communityLinkCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeB">
 					<l:HorizontalLayout>
 						<Image
 								src="./resources/sap/ui/documentation/sdk/images/logo_stackoverflow.png"
 								width="2.5rem"
+								densityAware="false"
 								class="sapUiTinyMarginTop"/>
 						<custom:TitleLink
 								href="http://stackoverflow.com/search?q=sapui5"
@@ -387,11 +418,14 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="sapUiBlockCenteredCell demokitInitialPagesColorPatternD communityLinkCell">
+						class="sapUiBlockCenteredCell communityLinkCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeC">
 					<l:HorizontalLayout>
 						<Image
 								src="./resources/sap/ui/documentation/sdk/images/logo_youtube.png"
 								width="2.5rem"
+								densityAware="false"
 								class="sapUiTinyMarginTop"/>
 						<custom:TitleLink
 								href="https://youtube.com/openui5videos"
@@ -404,11 +438,14 @@
 				</l:BlockLayoutCell>
 
 				<l:BlockLayoutCell
-						class="sapUiBlockCenteredCell demokitInitialPagesColorPatternE communityLinkCell">
+						class="sapUiBlockCenteredCell communityLinkCell"
+						backgroundColorSet="ColorSet11"
+						backgroundColorShade="ShadeD">
 					<l:HorizontalLayout>
 						<Image
 								src="./resources/sap/ui/documentation/sdk/images/logo_twitter.png"
 								width="2.5rem"
+								densityAware="false"
 								class="sapUiTinyMarginTop"/>
 						<custom:TitleLink
 								href="https://twitter.com/@openui5"

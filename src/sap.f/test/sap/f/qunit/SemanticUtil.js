@@ -8,7 +8,8 @@ SemanticUtil = (function (
 	MessageStrip,
 	Button,
 	Title,
-	SemanticTitle) {
+	Breadcrumbs,
+	Link) {
 	"use strict";
 
 	jQuery.sap.require("sap.f.semantic.SemanticConfiguration");
@@ -102,8 +103,8 @@ SemanticUtil = (function (
 			}
 		],
 		oFactory = {
-			getSemanticPage: function () {
-				return new SemanticPage();
+			getSemanticPage: function (oConfiguration) {
+				return new SemanticPage(oConfiguration || {});
 			},
 			getSemanticTitle : function(oContainer) {
 				return new sap.f.semantic.SemanticTitle(oContainer, null);
@@ -146,6 +147,20 @@ SemanticUtil = (function (
 					text: sText || "Default Title"
 				});
 			},
+			getBreadcrumbs: function () {
+				return new Breadcrumbs({
+					links: [
+						this.getLink({text: "Link"}),
+						this.getLink({text: "Link"}),
+						this.getLink({text: "Link"}),
+						this.getLink({text: "Link"}),
+						this.getLink({text: "Link"})
+					]
+				});
+			},
+			getLink: function(oConfig) {
+				return new Link(oConfig || {});
+			},
 			getSemanticConfiguration : function() {
 				return sap.f.semantic.SemanticConfiguration;
 			},
@@ -175,4 +190,4 @@ SemanticUtil = (function (
 				}
 			}
 		};
-})(sap.f.semantic.SemanticPage, sap.f.DynamicPageTitle, sap.m.OverflowToolbar, sap.m.ActionSheet, sap.m.MessageStrip, sap.m.Button, sap.m.Title);
+})(sap.f.semantic.SemanticPage, sap.f.DynamicPageTitle, sap.m.OverflowToolbar, sap.m.ActionSheet, sap.m.MessageStrip, sap.m.Button, sap.m.Title, sap.m.Breadcrumbs, sap.m.Link);

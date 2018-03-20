@@ -74,6 +74,20 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 					type: "sap.ui.test.TestElement",
 					multiple: true,
 					singularName: "subObj"
+				},
+				destroySingleAggr: {
+					type: "sap.ui.test.TestElement",
+					multiple: false
+				},
+				destroyMultiAggr: {
+					type: "sap.ui.test.TestElement",
+					multiple: true,
+					singularName: "destroyObj"
+				},
+				label : {
+					type : "sap.ui.core.Label",
+					altTypes : ["string"],
+					multiple : false
 				}
 			},
 			associations: {
@@ -139,12 +153,13 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 
 
 	function compareObjects(o, p) {
-		var i, keysO = Object.keys(o).sort(), keysP = Object
-							.keys(p).sort();
-					if (keysO.length !== keysP.length)
-						return false;// not the same nr of keys
+		var i, keysO = Object.keys(o).sort(), keysP = Object.keys(p).sort();
+
+		if (keysO.length !== keysP.length)
+			return false;// not the same nr of keys
 		if (keysO.join('') !== keysP.join(''))
 			return false;// different keys
+
 		for (i = 0; i < keysO.length; ++i) {
 			if (o[keysO[i]] instanceof Array) {
 				if (!(p[keysO[i]] instanceof Array))
@@ -153,8 +168,7 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 				// === false) return false
 				// would work, too, and perhaps is a better fit,
 				// still, this is easy, too
-				if (p[keysO[i]].sort().join('') !== o[keysO[i]]
-						.sort().join(''))
+				if (p[keysO[i]].sort().join('') !== o[keysO[i]].sort().join(''))
 					return false;
 			} else if (o[keysO[i]] instanceof Date) {
 				if (!(p[keysO[i]] instanceof Date))
@@ -177,8 +191,7 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 					}
 					return true;
 				}
-			}
-			if (o[keysO[i]] !== p[keysO[i]] && p[keysO[i]] !== "__ignore") {
+			} else if (o[keysO[i]] !== p[keysO[i]] && p[keysO[i]] !== "__ignore") {
 				return false;// not the same value
 			}
 
@@ -187,8 +200,8 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 	}
 
 	var vExpectedResult,
-		vActualResult,
-		bChecked = false;
+			vActualResult,
+			bChecked = false;
 
 	function setExpected(vExpected) {
 		vExpectedResult = vExpected;
@@ -210,9 +223,14 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 			return;
 		}
 		if (Array.isArray(vActualResult)) {
+			var bOk = true;
 			for (var i = 0; i < vActualResult.length; i++) {
-				assert.ok(compareObjects(vActualResult[i], vExpectedResult[i]), "Expected result matched. " + sComment);
+				if (!compareObjects(vActualResult[i], vExpectedResult[i])) {
+					bOk = false;
+					break;
+				}
 			}
+			assert.ok(bOk, "Expected result matched. " + sComment);
 		} else {
 			assert.ok(compareObjects(vActualResult, vExpectedResult), "Expected result matched. " + sComment);
 		}
@@ -226,6 +244,9 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 			this.obj.setAggregation("singleAggr", new sap.ui.test.TestElement());
 			this.obj.addAggregation("multiAggr", new sap.ui.test.TestElement());
 			this.obj.addAggregation("multiAggr", new sap.ui.test.TestElement());
+			this.obj.setAggregation("destroySingleAggr", new sap.ui.test.TestElement());
+			this.obj.addAggregation("destroyMultiAggr", new sap.ui.test.TestElement());
+			this.obj.addAggregation("destroyMultiAggr", new sap.ui.test.TestElement());
 
 			this.subObj = new sap.ui.test.TestElement();
 			this.template = new sap.ui.test.TestElement({
@@ -253,9 +274,13 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 			destroy: true
 		});
 
+		assert.equal(true,oObserver.isObserved(this.obj),"The object is observed");
+
 		this.obj.destroy();
 
 		assert.equal(bDestroyed,true,"The object was destroyed");
+
+		assert.equal(false, oObserver.isObserved(this.obj),"The object is not observed anymore since it was destroyed");
 
 		oObserver.disconnect();
 	});
@@ -363,6 +388,9 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 
 		this.obj.setProperty("intValue", -1);
 		this.checkExpected("Set 'intValue' to '-1'. Observer called successfully");
+
+		this.obj.destroy();
+		assert.equal(false, oObserver.isObserved(this.obj),"The object is not observed anymore since it was destroyed");
 
 		oObserver.disconnect();
 	});
@@ -542,7 +570,7 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 			children: null
 		});
 
-		this.obj.setAggregation("singleAggr",null);
+		this.obj.setAggregation("singleAggr", null);
 		this.checkExpected("Single aggregation removed. Observer called successfully");
 
 		//adding a single aggregation again
@@ -557,6 +585,40 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 
 		this.obj.setAggregation("singleAggr", oChild);
 		this.checkExpected("Single aggregation added. Observer called successfully");
+
+		//setting single aggregation with altType
+		setExpected({
+			object: this.obj,
+			type:"aggregation",
+			name:"label",
+			mutation: "insert",
+			child: "Text",
+			children: null
+		});
+
+		this.obj.setAggregation("label", "Text");
+		this.checkExpected("Single aggregation added. Observer called successfully");
+
+		// move object from one aggregation to an other
+		oChild = this.obj.getAggregation("multiAggr")[1];
+		setExpected([{
+			object: this.obj,
+			type:"aggregation",
+			name:"multiAggr",
+			mutation: "remove",
+			child: oChild,
+			children: null
+		},{
+			object: this.obj,
+			type:"aggregation",
+			name:"anotherMulti",
+			mutation: "insert",
+			child: oChild,
+			children: null
+		}]);
+
+		this.obj.addAggregation("anotherMulti", oChild);
+		this.checkExpected("move to other aggregation. Observer called twice");
 
 		oObserver.disconnect();
 	});
@@ -605,6 +667,19 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 		this.obj.setAggregation("singleAggr", oChild);
 		this.checkExpected("Single aggregation added. Observer called successfully");
 
+		// destroy a single aggregation
+		setExpected({
+			object: this.obj,
+			type:"aggregation",
+			name:"singleAggr",
+			mutation: "remove",
+			child: oChild,
+			children: null
+		});
+
+		this.obj.destroyAggregation("singleAggr");
+		this.checkExpected("Single aggregation destroyed. Observer called successfully");
+
 		//setting an aggregation that is not observed
 		setExpected();
 		this.obj.addAggregation("multiAggr", this.obj.getAggregation("multiAggr")[1]);
@@ -645,7 +720,7 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 		this.obj.addAggregation("multiAggr", oChild);
 		this.checkExpected("Remove and insert. Observer called twice");
 
-		//adding an aggregation
+		//removing an aggregation
 		setExpected({
 			object: this.obj,
 			type:"aggregation",
@@ -671,11 +746,117 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 		this.obj.insertAggregation("multiAggr", oChild, 0);
 		this.checkExpected("Multi aggregation added. Observer called successfully");
 
+		//removing all multi aggregation
+		var oChild2 = this.obj.getAggregation("multiAggr")[1];
+		setExpected([{
+			object: this.obj,
+			type:"aggregation",
+			name:"multiAggr",
+			mutation: "remove",
+			child: oChild,
+			children: null
+		},{
+			object: this.obj,
+			type:"aggregation",
+			name:"multiAggr",
+			mutation: "remove",
+			child: oChild2,
+			children: null
+		}]);
+		this.obj.removeAllAggregation("multiAggr");
+		this.checkExpected("RemoveAll Observer called twice");
+
+		this.obj.addAggregation("multiAggr", oChild);
+		this.obj.addAggregation("multiAggr", oChild2);
+
+		//destroy multi aggregation
+		vActualResult = undefined;
+		var oChild2 = this.obj.getAggregation("multiAggr")[1];
+		setExpected([{
+			object: this.obj,
+			type:"aggregation",
+			name:"multiAggr",
+			mutation: "remove",
+			child: oChild,
+			children: null
+		},{
+			object: this.obj,
+			type:"aggregation",
+			name:"multiAggr",
+			mutation: "remove",
+			child: oChild2,
+			children: null
+		}]);
+		this.obj.destroyAggregation("multiAggr");
+		this.checkExpected("Destroy Observer called twice");
+
 		//setting an aggregation that is not observed
 		setExpected();
 		this.obj.setAggregation("singleAggr", null);
 		this.checkExpected("Single aggregation removed. Observer not alled, because not registered to this aggregation");
 
+		oObserver.disconnect();
+
+	});
+	
+	QUnit.test("ManagedObjectObserver listening to aggregation changes for destroying aggegations", function(assert) {
+
+		//listen to all changes
+		var oObserver = new ManagedObjectObserver(function(oChanges) {
+			setActual(oChanges);
+			
+			if (oChanges.name == "destroySingleAggr") {
+				var oChild = oChanges.object.mAggregations[oChanges.name];
+				assert.equal(oChild,null,"The child is removed");
+			}
+			
+			if (oChanges.name == "destroyMultiAggr") {
+				var aChildren = oChanges.object.mAggregations[oChanges.name];
+				assert.ok(aChildren,null,"There are still children");
+				assert.equal(aChildren.length,1,"But there is only one");
+			}
+		});
+		oObserver.observe(this.obj, {
+			aggregations: ["destroySingleAggr","destroyMultiAggr"]
+		});
+		
+		assert.ok(true, "Observation of destroying aggegrations started");
+		
+		//setting the same single aggregation again
+		setExpected();
+		this.obj.setAggregation("destroySingleAggr", this.obj.getAggregation("destroySingleAggr"));
+		this.checkExpected("Nothing changed");
+
+		//removing a single aggregation
+		var oChild = this.obj.getAggregation("destroySingleAggr");
+		setExpected({
+			object: this.obj,
+			type:"aggregation",
+			name:"destroySingleAggr",
+			mutation: "remove",
+			child: oChild,
+			children: null
+		});
+
+		oChild.destroy();
+		this.checkExpected("Single aggregation removed. Observer called successfully");
+		
+		setExpected();
+
+		//removing a single aggregation
+		var oChild = this.obj.getAggregation("destroyMultiAggr")[0];
+		setExpected({
+			object: this.obj,
+			type:"aggregation",
+			name:"destroyMultiAggr",
+			mutation: "remove",
+			child: oChild,
+			children: null
+		});
+
+		oChild.destroy();
+		this.checkExpected("Multi aggregation removed. Observer called successfully");
+		
 		oObserver.disconnect();
 
 	});
@@ -726,7 +907,7 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 			ids: oChild.getId()
 		}]);
 
-		this.obj.setAssociation("singleAsso",oChild);
+		this.obj.setAssociation("singleAsso", oChild);
 		this.checkExpected("Single association set, remove and insert called. Observer called successfully");
 
 		//remove a single association again
@@ -862,6 +1043,21 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 
 		this.obj.removeAssociation("multiAsso", oChild);
 		this.checkExpected("Multi association removed. Observer called successfully");
+
+		this.obj.addAssociation("multiAsso",oChild);
+		vActualResult = undefined;
+
+		//remove all multi associations
+		setExpected({
+			object: this.obj,
+			type:"association",
+			name:"multiAsso",
+			mutation: "remove",
+			ids: ["", oChild.getId()]
+		});
+
+		this.obj.removeAllAssociation("multiAsso");
+		this.checkExpected("Multi association removed all. Observer called successfully");
 
 		//setting another association that is not observed
 		setExpected();
@@ -1480,5 +1676,127 @@ sap.ui.require(['sap/ui/base/ManagedObjectObserver', 'sap/ui/model/json/JSONMode
 		}, "Observer is not created without a callback and threw error");
 	});
 
+	QUnit.test("ManagedObjectObserver unobserve complete object", function(assert) {
+		var obj2 = new sap.ui.test.TestElement("myObject2");
+
+		assert.strictEqual(this.obj._observer, undefined, "No observer");
+		assert.strictEqual(obj2._observer, undefined, "No observer");
+		//listen to all changes
+		var oObserver = new ManagedObjectObserver(function(oChanges) {
+			setActual(oChanges);
+		});
+
+		oObserver.observe(this.obj, {
+			properties: true
+		});
+
+		oObserver.observe(obj2, {
+			properties: true
+		});
+
+		assert.ok(true, "Observation of all property changes started for object1 and object2");
+
+		//setting the default value of a property
+		setExpected();
+		this.obj.setProperty("value", "");
+		this.checkExpected("Nothing changed in object1");
+
+		//setting a value
+		setExpected({
+			object: this.obj,
+			type:"property",
+			name:"value",
+			old: "",
+			current: "test"
+		});
+
+		this.obj.setProperty("value", "test");
+		this.checkExpected("Set 'value' to 'test'. Observer called successfully in object1");
+
+		setExpected({
+			object: this.obj,
+			type:"property",
+			name:"value",
+			old: "test",
+			current: "1"
+		});
+		this.obj.setProperty("value", 1);
+		this.checkExpected("Set 'value' to '1'. Observer called successfully in object 1");
+
+		setExpected({
+			object: obj2,
+			type:"property",
+			name:"value",
+			old: "test",
+			current: "2"
+		});
+		obj2.setProperty("value", 2);
+		this.checkExpected("Set 'value' to '2'. Observer called successfully in object2");
+
+		oObserver.unobserve(this.obj);
+
+		this.obj.setProperty("value", 2);
+		this.checkExpected("Set 'value' to '2'. Observer not called, actual did not change");
+
+		setExpected({
+			object: obj2,
+			type:"property",
+			name:"value",
+			old: "test",
+			current: "3"
+		});
+		obj2.setProperty("value", 3);
+		this.checkExpected("Set 'value' to '3'. Observer for object2 is still called successfully in object2");
+
+		oObserver.disconnect();
+	});
+
+	QUnit.test("ManagedObjectObserver observe/isObserved", function(assert) {
+
+		assert.strictEqual(this.obj._observer, undefined, "No observer");
+		//listen to all changes
+		var oObserver = new ManagedObjectObserver(function(oChanges) {
+			setActual(oChanges);
+		});
+
+		oObserver.observe(this.obj, {
+			properties: true
+		});
+
+		assert.ok(true, "Observation of all property changes started");
+
+		var oConfiguration = oObserver.getConfiguration(this.obj);
+
+		assert.strictEqual(10,oConfiguration.properties.length,"All ten properties of the object are observed");
+		assert.equal(true,oObserver.isObserved(this.obj),"The object is observed");
+
+		oObserver.unobserve(this.obj, {
+			properties: ["value"]
+		});
+
+		oConfiguration = oObserver.getConfiguration(this.obj);
+
+		assert.ok(true, "Observation of property 'value' stopped");
+
+		assert.strictEqual(9,oConfiguration.properties.length,"Remain 9 properties of the object that are observed");
+		assert.equal(true,oObserver.isObserved(this.obj),"The object is still observed");
+
+		oObserver.observe(this.obj, {
+			aggregations: ["singleAggr"]
+		});
+
+		oConfiguration = oObserver.getConfiguration(this.obj);
+
+		assert.ok(true, "Observation of aggregation 'singleAggr' started");
+
+		assert.strictEqual(9,oConfiguration.properties.length,"Still 9 properties of the object that are observed");
+		assert.strictEqual(1,oConfiguration.aggregations.length,"Additionally one aggregation is observed");
+		assert.equal(true,oObserver.isObserved(this.obj),"The object is still observed");
+
+		oObserver.unobserve(this.obj);
+		assert.equal(false,oObserver.isObserved(this.obj),"The object is no longer observed");
+
+		oObserver.disconnect();
+	});
 
 });

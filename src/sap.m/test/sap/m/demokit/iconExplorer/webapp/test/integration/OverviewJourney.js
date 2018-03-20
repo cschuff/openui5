@@ -8,9 +8,6 @@ sap.ui.define([
 	QUnit.module("Overview");
 
 	opaTest("Should see the results table with all entries", function (Given, When, Then) {
-		// Arrangements
-		Given.iStartMyAppOnTheDetailsTab();
-
 		//Actions
 		When.onTheOverviewPage.iLookAtTheScreen();
 
@@ -19,7 +16,7 @@ sap.ui.define([
 			and.theTitleShouldDisplayTheTotalAmountOfItems();
 	});
 
-	opaTest("Should be able to load 50 more items", function(Given, When, Then) {
+	opaTest("Should be able to load 200 more items", function(Given, When, Then) {
 		//Actions
 		When.onTheOverviewPage.iPressOnMoreData();
 
@@ -43,18 +40,18 @@ sap.ui.define([
 	opaTest("Selecting a tag on the details page should deliver results that contain the tag value", function (Given, When, Then) {
 		//Actions
 		When.onTheOverviewPage.iPressOnTheTabWithTheKey("details").
-			and.iSelectTheTagWithName("data");
+			and.iSelectTheTagWithName("settings");
 
 		// Assertions
-		Then.onTheOverviewPage.theTableShowsOnlyObjectsWithTheTag("data");
+		Then.onTheOverviewPage.theTableShowsOnlyObjectsWithTheTag("settings");
 	});
 
 	opaTest("Selecting another tag on the details page should deliver results that contain the tag value", function (Given, When, Then) {
 		//Actions
-		When.onTheOverviewPage.iSelectTheTagWithName("analytics");
+		When.onTheOverviewPage.iSelectTheTagWithName("cogwheels");
 
 		// Assertions
-		Then.onTheOverviewPage.theTableShowsOnlyObjectsWithTheTag("analytics");
+		Then.onTheOverviewPage.theTableShowsOnlyObjectsWithTheTag("cogwheels");
 	});
 
 	opaTest("Selecting a tag should deliver results that contain the tag value", function (Given, When, Then) {
@@ -64,7 +61,7 @@ sap.ui.define([
 
 		// Assertions
 		Then.onTheOverviewPage.theTableShowsTheCategory("Objects").
-			and.iTeardownMyAppFrame();
+			and.iTeardownMyApp();
 	});
 
 });

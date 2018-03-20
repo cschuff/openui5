@@ -6,9 +6,14 @@
 sap.ui.define([
 	'sap/ui/rta/plugin/Plugin',
 	'sap/ui/rta/Utils',
-	'sap/ui/rta/command/CompositeCommand'
-
-], function(Plugin, Utils, CompositeCommand) {
+	'sap/ui/rta/command/CompositeCommand',
+	'sap/ui/dt/OverlayRegistry'
+], function(
+	Plugin,
+	Utils,
+	CompositeCommand,
+	OverlayRegistry
+){
 	"use strict";
 
 	/**
@@ -46,8 +51,9 @@ sap.ui.define([
 	 * @override
 	 */
 	Remove.prototype.registerElementOverlay = function(oOverlay) {
-		oOverlay.attachBrowserEvent("keydown", this._onKeyDown, this);
-
+		if (this.isEnabled(oOverlay)) {
+			oOverlay.attachBrowserEvent("keydown", this._onKeyDown, this);
+		}
 		Plugin.prototype.registerElementOverlay.apply(this, arguments);
 	};
 
@@ -58,14 +64,9 @@ sap.ui.define([
 	 */
 	Remove.prototype._isEditable = function(oOverlay) {
 		var bEditable = false;
-		var oElement = oOverlay.getElementInstance();
+		var oElement = oOverlay.getElement();
 
-		var oParentDesignTimeMetadata = Utils.getRelevantContainerDesigntimeMetadata(oOverlay);
-		if (!oParentDesignTimeMetadata) {
-			return false;
-		}
-
-		var oRemoveAction = this._getRemoveAction(oOverlay);
+		var oRemoveAction = this.getAction(oOverlay);
 		if (oRemoveAction && oRemoveAction.changeType) {
 			if (oRemoveAction.changeOnRelevantContainer) {
 				oElement = oOverlay.getRelevantContainer();
@@ -81,57 +82,71 @@ sap.ui.define([
 	};
 
 	/**
-	 * @param	{sap.ui.dt.Overlay} oOverlay overlay object
-	 * @return {sap.ui.dt.DesignTimeMetadata} oDesignTimeMetadata
-	 * @private
-	 */
-	Remove.prototype._getRemoveAction = function(oOverlay) {
-		return oOverlay.getDesignTimeMetadata().getAction("remove", oOverlay.getElementInstance());
-	};
-
-	/**
-	 * Checks if remove is available for oOverlay
-	 *
-	 * @param {sap.ui.dt.Overlay} oOverlay overlay object
-	 * @return {boolean} true if available
-	 * @public
-	 */
-	Remove.prototype.isRemoveAvailable = function(oOverlay) {
-		return this._isEditableByPlugin(oOverlay);
-	};
-
-	/**
 	 * Checks if remove is enabled for oOverlay
 	 *
 	 * @param {sap.ui.dt.Overlay} oOverlay overlay object
 	 * @return {boolean} true if enabled
 	 * @public
 	 */
-	Remove.prototype.isRemoveEnabled = function(oOverlay) {
-		var oAction = this._getRemoveAction(oOverlay);
+	Remove.prototype.isEnabled = function(oOverlay) {
+		var oAction = this.getAction(oOverlay);
+		var bIsEnabled = false;
 		if (!oAction) {
-			return false;
+			return bIsEnabled;
 		}
 
 		if (typeof oAction.isEnabled !== "undefined") {
 			if (typeof oAction.isEnabled === "function") {
-				return oAction.isEnabled(oOverlay.getElementInstance());
+				bIsEnabled = oAction.isEnabled(oOverlay.getElement());
 			} else {
-				return oAction.isEnabled;
+				bIsEnabled = oAction.isEnabled;
 			}
+		} else {
+			bIsEnabled = true;
 		}
-		return true;
+		return bIsEnabled && this._canBeRemovedFromAggregation(oOverlay);
+	};
+
+	/**
+	 * Checks if Overlay control has a valid parent and if it is
+	 * not the last visible control in the aggregation
+	 *
+	 * @param  {sap.ui.dt.Overlay} oOverlay Overlay for the control
+	 * @return {boolean} Returns true if the control can be removed
+	 * @private
+	 */
+	Remove.prototype._canBeRemovedFromAggregation = function(oOverlay){
+		var oElement = oOverlay.getElement();
+		var oParent = oElement.getParent();
+		if (!oParent){
+			return false;
+		}
+		var aElements = oParent.getAggregation(oElement.sParentAggregationName);
+		if (!Array.isArray(aElements)){
+			return true;
+		}
+		if (aElements.length === 1){
+			return false;
+		}
+
+		// Fallback to 1 if no overlay is selected
+		var iNumberOfSelectedOverlays = this.getNumberOfSelectedOverlays() || 1;
+		var aInvisibleElements = aElements.filter(function(oElement){
+			var oElementOverlay = OverlayRegistry.getOverlay(oElement);
+			return !(oElementOverlay && oElementOverlay.getElementVisibility());
+		});
+		return !(aInvisibleElements.length === (aElements.length - iNumberOfSelectedOverlays));
 	};
 
 	/**
 	 * @param  {sap.ui.dt.Overlay} oOverlay overlay object
-	 * @return {String}          confirmation text
+	 * @return {String} Returns the confirmation text
 	 * @private
 	 */
 	Remove.prototype._getConfirmationText = function(oOverlay) {
-		var oAction = this._getRemoveAction(oOverlay);
+		var oAction = this.getAction(oOverlay);
 		if (oAction && oAction.getConfirmationText) {
-			return oAction.getConfirmationText(oOverlay.getElementInstance());
+			return oAction.getConfirmationText(oOverlay.getElement());
 		}
 	};
 
@@ -142,8 +157,9 @@ sap.ui.define([
 	 * @override
 	 */
 	Remove.prototype.deregisterElementOverlay = function(oOverlay) {
-		oOverlay.detachBrowserEvent("keydown", this._onKeyDown, this);
-
+		if (this.isEnabled(oOverlay)) {
+			oOverlay.detachBrowserEvent("keydown", this._onKeyDown, this);
+		}
 		Plugin.prototype.deregisterElementOverlay.apply(this, arguments);
 	};
 
@@ -170,12 +186,13 @@ sap.ui.define([
 		if (aOverlays){
 			aSelection = aOverlays;
 		} else {
-			var oDesignTime = this.getDesignTime();
-			aSelection = oDesignTime.getSelection();
+			aSelection = this.getSelectedOverlays();
 		}
 
+		aSelection = aSelection.filter(this.isEnabled, this);
+
 		if (aSelection.length > 0) {
-			this._handleRemove( aSelection );
+			this.handler(aSelection);
 		}
 	};
 
@@ -193,51 +210,97 @@ sap.ui.define([
 		}
 	};
 
-	Remove.prototype._handleRemove = function(aSelectedOverlays) {
+	Remove.prototype.handler = function(aSelectedOverlays) {
 		var aPromises = [];
 		var oCompositeCommand = new CompositeCommand();
+		var fnSetFocus = function (oOverlay) {
+			oOverlay.setSelected(true);
+			setTimeout(function() {
+				oOverlay.focus();
+			}, 0);
+		};
 
-		aSelectedOverlays.forEach(function(oOverlay) {
-			var oCommand;
+		var oNextOverlaySelection = Remove._getElementToFocus(aSelectedOverlays);
 
-			var oRemovedElement = oOverlay.getElementInstance();
-			var oDesignTimeMetadata = oOverlay.getDesignTimeMetadata();
-			var oRemoveAction = this._getRemoveAction(oOverlay);
-			var oRelevantElement;
-			if (oRemoveAction.changeOnRelevantContainer) {
-				oRelevantElement = oOverlay.getRelevantContainer();
-			} else {
-				oRelevantElement = oRemovedElement;
-			}
-			var sVariantManagementKey = this.getVariantManagementKey(oOverlay, oRelevantElement, oRemoveAction.changeType);
-
-			if (this.isRemoveEnabled(oOverlay)) {
+		aSelectedOverlays
+			.forEach(function(oOverlay) {
+				var oCommand;
+				var oRemovedElement = oOverlay.getElement();
+				var oDesignTimeMetadata = oOverlay.getDesignTimeMetadata();
+				var oRemoveAction = this.getAction(oOverlay);
+				var sVariantManagementReference = this.getVariantManagementReference(oOverlay, oRemoveAction);
 				var sConfirmationText = this._getConfirmationText(oOverlay);
+
 				if (sConfirmationText) {
 					aPromises.push(
 						Utils.openRemoveConfirmationDialog(oRemovedElement, sConfirmationText)
 						.then(function(bConfirmed) {
 							if (bConfirmed) {
-								oCommand = this._getRemoveCommand(oRemovedElement, oDesignTimeMetadata, sVariantManagementKey);
+								oCommand = this._getRemoveCommand(oRemovedElement, oDesignTimeMetadata, sVariantManagementReference);
 								oCompositeCommand.addCommand(oCommand);
 							}
 						}.bind(this))
 					);
 				} else {
-					oCommand = this._getRemoveCommand(oRemovedElement, oDesignTimeMetadata, sVariantManagementKey);
+					oCommand = this._getRemoveCommand(oRemovedElement, oDesignTimeMetadata, sVariantManagementReference);
 					oCompositeCommand.addCommand(oCommand);
 				}
-			}
 		}, this);
 
 		// since Promise.all is always asynchronous, we want to call it only if at least one promise exists
 		if (aPromises.length) {
 			Promise.all(aPromises).then(function() {
 				this._fireElementModified(oCompositeCommand);
+				fnSetFocus(oNextOverlaySelection);
 			}.bind(this));
 		} else {
 			this._fireElementModified(oCompositeCommand);
+			fnSetFocus(oNextOverlaySelection);
 		}
+	};
+
+	Remove._getElementToFocus = function(aSelectedOverlays) {
+		// BCP: 1780366011
+		// if one element is selected then we try to get next or previous sibling
+		// considering already hidden siblings, if not succeed then select relevant container
+		var oNextOverlaySelection;
+		if (aSelectedOverlays.length === 1) {
+			var oOverlay = aSelectedOverlays[0];
+			var aSiblings = oOverlay.getParent().getAggregation(oOverlay.sParentAggregationName);
+			if (aSiblings.length > 1) {
+				var iOverlayPosition = aSiblings.indexOf(oOverlay);
+				var aCandidates = aSiblings.slice(iOverlayPosition + 1);
+				if (iOverlayPosition !== 0) {
+					aCandidates = aCandidates.concat(
+						aSiblings.slice(0, iOverlayPosition).reverse()
+					);
+				}
+				oNextOverlaySelection = aCandidates.filter(function (oSibling) {
+					return oSibling.getElement().getVisible();
+				}).shift();
+			}
+		}
+		if (!oNextOverlaySelection) {
+			oNextOverlaySelection = OverlayRegistry.getOverlay(aSelectedOverlays[0].getRelevantContainer());
+		}
+		return oNextOverlaySelection;
+	};
+
+	/**
+	 * Retrieve the context menu item for the action.
+	 * @param  {sap.ui.dt.ElementOverlay} oOverlay Overlay for which the context menu was opened
+	 * @return {object[]}          Returns array containing the items with required data
+	 */
+	Remove.prototype.getMenuItems = function(oOverlay){
+		return this._getMenuItems(oOverlay, {pluginId : "CTX_REMOVE", rank : 60, icon : "sap-icon://hide"});
+	};
+
+	/**
+	 * Get the name of the action related to this plugin.
+	 * @return {string} Returns the action name
+	 */
+	Remove.prototype.getActionName = function(){
+		return "remove";
 	};
 
 	return Remove;

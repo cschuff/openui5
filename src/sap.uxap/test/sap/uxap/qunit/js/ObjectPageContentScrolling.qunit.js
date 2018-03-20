@@ -234,12 +234,54 @@
 				oObjectPage.scrollToSection("UxAP-objectPageContentScrolling--firstSection",0,0);
 				setTimeout(function() {
 					assert.ok(isObjectPageHeaderStickied(oObjectPage), "ObjectHeader is in stickied mode");
-					//ObjectPageContentScrollingView.destroy();
+					ObjectPageContentScrollingView.destroy();
 					done();
 				}, 1000);
 			}, 1000); //scroll delay
 		}, 1000); //dom calc delay
 
+	});
+
+	QUnit.test("_isClosestScrolledSection should return the first section if all sections are hidden", function (assert) {
+		var clock = sinon.useFakeTimers();
+		var oObjectPageContentScrollingView = sap.ui.xmlview("UxAP-objectPageContentScrolling", {
+			viewName: "view.UxAP-ObjectPageContentScrolling"
+		});
+
+		oObjectPageContentScrollingView.placeAt('qunit-fixture');
+		sap.ui.getCore().applyChanges();
+		clock.tick(500);
+
+		var oObjectPage = oObjectPageContentScrollingView.byId("ObjectPageLayout"),
+			aSections = oObjectPage.getSections(),
+			sFirstSectionId = "UxAP-objectPageContentScrolling--firstSection";
+
+		for (var section in aSections) {
+			aSections[section].setVisible(false);
+		}
+
+		assert.strictEqual(oObjectPage._isClosestScrolledSection(sFirstSectionId), true, "Fisrt section is the closest scrolled section");
+
+		clock.restore();
+		oObjectPageContentScrollingView.destroy();
+	});
+
+	QUnit.test("ScrollEnablement private API", function (assert) {
+		var oObjectPageContentScrollingView = sap.ui.xmlview("UxAP-objectPageContentScrolling", {
+			viewName: "view.UxAP-ObjectPageContentScrolling"
+		});
+
+		// arrange
+		oObjectPageContentScrollingView.placeAt('qunit-fixture');
+		sap.ui.getCore().applyChanges();
+
+		var oObjectPage = oObjectPageContentScrollingView.byId("ObjectPageLayout");
+
+		oObjectPage._initializeScroller();
+
+		assert.ok(oObjectPage._oScroller._$Container, "ScrollEnablement private API is OK.");
+
+		oObjectPageContentScrollingView.destroy();
 	});
 
 	function isObjectPageHeaderStickied(oObjectPage) {

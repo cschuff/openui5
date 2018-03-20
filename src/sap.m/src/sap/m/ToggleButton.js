@@ -3,8 +3,15 @@
  */
 
 // Provides control sap.m.ToggleButton.
-sap.ui.define(['jquery.sap.global', './Button', './library', 'sap/ui/core/EnabledPropagator'],
-	function(jQuery, Button, library, EnabledPropagator) {
+sap.ui.define([
+	'jquery.sap.global',
+	'./Button',
+	'./library',
+	'sap/ui/core/EnabledPropagator',
+	'./ToggleButtonRenderer',
+	'jquery.sap.keycodes'
+],
+	function(jQuery, Button, library, EnabledPropagator, ToggleButtonRenderer) {
 	"use strict";
 
 
@@ -29,11 +36,13 @@ sap.ui.define(['jquery.sap.global', './Button', './library', 'sap/ui/core/Enable
 	 * @constructor
 	 * @public
 	 * @alias sap.m.ToggleButton
+	 * @see {@link fiori:https://experience.sap.com/fiori-design-web/button/ Toggle Button}
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	var ToggleButton = Button.extend("sap.m.ToggleButton", /** @lends sap.m.ToggleButton.prototype */ { metadata : {
 
 		library : "sap.m",
+		designtime: "sap/m/designtime/ToggleButton.designtime",
 		properties : {
 
 			/**
@@ -109,4 +118,4 @@ sap.ui.define(['jquery.sap.global', './Button', './library', 'sap/ui/core/Enable
 
 	return ToggleButton;
 
-}, /* bExport= */ true);
+});

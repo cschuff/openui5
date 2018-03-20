@@ -83,6 +83,11 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 		assert.equal(oInstance.getChangeType(), "filterVariant");
 	});
 
+	QUnit.test("Change.getFileType", function(assert) {
+		var oInstance = new Change(this.oChangeDef);
+		assert.equal(oInstance.getFileType(), "variant");
+	});
+
 	QUnit.test("Change.getPackage", function(assert) {
 		var oInstance = new Change(this.oChangeDef);
 		assert.equal(oInstance.getPackage(), "$TMP");
@@ -91,6 +96,18 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 	QUnit.test("getNamespace should return the namespace of the defintion", function(assert) {
 		var oInstance = new Change(this.oChangeDef);
 		assert.strictEqual(oInstance.getNamespace(), "apps/smartFilterBar/changes/");
+	});
+
+	QUnit.test("setNamespace should set the namespace of the definition", function(assert) {
+		var oInstance = new Change(this.oChangeDef);
+		oInstance.setNamespace("apps/ReferenceAppId/changes/");
+		assert.strictEqual(oInstance.getNamespace(), "apps/ReferenceAppId/changes/");
+	});
+
+	QUnit.test("setComponent should set the reference of the definition", function(assert) {
+		var oInstance = new Change(this.oChangeDef);
+		oInstance.setComponent("AppVariantId");
+		assert.strictEqual(oInstance.getComponent(), "AppVariantId");
 	});
 
 	QUnit.test("Change.getId", function(assert) {
@@ -258,11 +275,38 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 		assert.equal(oCreatedFile.fileType, "variant");
 		assert.equal(oCreatedFile.namespace, "apps/smartFilterBar/adapt/oil/changes/");
 		assert.equal(oCreatedFile.packageName, "/UIF/LREP");
+		assert.equal(oCreatedFile.support.generator, "Change.createInitialFileContent");
 		assert.deepEqual(oCreatedFile.content, {something: "createNewVariant"});
 		assert.deepEqual(oCreatedFile.texts, {variantName: {value: "myVariantName", type: "myTextType"}});
 		assert.deepEqual(oCreatedFile.selector, {"id": "control1"});
 		assert.deepEqual(oCreatedFile.dependentSelector, {source: {id: "controlSource1", idIsLocal: true}, target: {id: "controlTarget1", idIsLocal: true}});
 		assert.deepEqual(oCreatedFile.validAppVersions, {creation: "1.0.0", from: "1.0.0", to: "1.0.0"});
+	});
+
+	QUnit.test("createInitialFileContent when generator is pre-set", function(assert) {
+		var oInfo = {
+			changeType: "filterVariant",
+			content: {},
+			namespace: "apps/smartFilterBar/adapt/oil/changes/",
+			generator: "RTA"
+		};
+
+		var oCreatedFile = Change.createInitialFileContent(oInfo);
+
+		assert.equal(oCreatedFile.support.generator, "RTA");
+	});
+
+	QUnit.test("createInitialFileContent when fileType is pre-set", function(assert) {
+		var oInfo = {
+			changeType: "filterVariant",
+			content: {},
+			namespace: "apps/smartFilterBar/adapt/oil/changes/",
+			fileType: "newFileType"
+		};
+
+		var oCreatedFile = Change.createInitialFileContent(oInfo);
+
+		assert.equal(oCreatedFile.fileType, "newFileType");
 	});
 
 	QUnit.test("_isReadOnlyDueToOriginalLanguage shall compare the original language with the current language", function(assert) {
@@ -441,7 +485,7 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 			new sap.ui.core.Control("control4Id"),
 			new sap.ui.core.Control("control5Id")
 		];
-		var aControlId = ["control6Id", "control7Id", "control1Id"]; //Control 1 duplicate. Should not be included.
+		var aControlId = ["control6Id", "control7Id", "undefined", "control1Id"]; //Control 1 duplicate. Should not be included.
 		var sId;
 
 		var oJsControlTreeModifierGetSelectorStub = this.stub(JsControlTreeModifier, "getSelector");
@@ -480,7 +524,9 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 			idIsLocal: true
 		});
 
-		oJsControlTreeModifierGetSelectorStub.onCall(7).returns({
+		oJsControlTreeModifierGetSelectorStub.onCall(7).returns({});
+
+		oJsControlTreeModifierGetSelectorStub.onCall(8).returns({
 			id: "control1",
 			idIsLocal: true
 		});
@@ -508,6 +554,8 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 		};
 		var aDependentIdList = oInstance.getDependentIdList(oAppComponent);
 		assert.equal(aDependentIdList.length, 10);
+		var aDependentIdList = oInstance.getDependentControlIdList(oAppComponent);
+		assert.equal(aDependentIdList.length, 9);
 	});
 
 	QUnit.test("Operations add and get dependent control do not break when working with old changes (without dependentSelector)", function(assert) {
@@ -521,7 +569,7 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 			new sap.ui.core.Control("control4IdB"),
 			new sap.ui.core.Control("control5IdB")
 		];
-		var aControlId = ["control6IdB", "control7IdB"];
+		var aControlId = ["control6IdB", "undefined", "control7IdB"];
 		var sId;
 
 		var oJsControlTreeModifierGetSelectorStub = this.stub(JsControlTreeModifier, "getSelector");
@@ -555,7 +603,9 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 			idIsLocal: true
 		});
 
-		oJsControlTreeModifierGetSelectorStub.onCall(6).returns({
+		oJsControlTreeModifierGetSelectorStub.onCall(6).returns({});
+
+		oJsControlTreeModifierGetSelectorStub.onCall(7).returns({
 			id: "control7",
 			idIsLocal: true
 		});
@@ -571,6 +621,8 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 
 		var aDependentIdList = oInstance.getDependentIdList({});
 		assert.equal(aDependentIdList.length, 1);
+		var aDependentIdList = oInstance.getDependentControlIdList({});
+		assert.equal(aDependentIdList.length, 0);
 
 		oInstance.addDependentControl(sControlId, "element", {modifier: JsControlTreeModifier});
 		oInstance.addDependentControl(oControl, "anotherSource", {modifier: JsControlTreeModifier});
@@ -589,6 +641,8 @@ jQuery.sap.require("sap.ui.fl.changeHandler.JsControlTreeModifier");
 		};
 		aDependentIdList = oInstance.getDependentIdList(oAppComponent);
 		assert.equal(aDependentIdList.length, 8);
+		aDependentIdList = oInstance.getDependentControlIdList(oAppComponent);
+		assert.equal(aDependentIdList.length, 7);
 	});
 
 }(sap.ui.fl.Change, sap.ui.fl.Utils, sap.ui.base.EventProvider, sap.ui.fl.registry.Settings, sap.ui.fl.changeHandler.JsControlTreeModifier));

@@ -2,20 +2,19 @@
  * ${copyright}
  */
 
-sap.ui.define("sap/m/PDFViewerRenderManager", [
+sap.ui.define([
 	"jquery.sap.global",
 	"sap/m/library",
 	"sap/m/Dialog",
 	"sap/m/Button",
-	"sap/m/Link",
 	"sap/m/MessagePage",
 	"sap/m/OverflowToolbar",
 	"sap/m/OverflowToolbarButton",
 	"sap/m/Title",
 	"sap/m/ToolbarSpacer",
 	"sap/m/OverflowToolbarLayoutData"
-], function ($, library, Dialog, Button, Link, MessagePage, OverflowToolbar, OverflowToolbarButton, Title,
-             ToolbarSpacer, OverflowToolbarLayoutData) {
+], function($, library, Dialog, Button, MessagePage, OverflowToolbar, OverflowToolbarButton, Title,
+	ToolbarSpacer, OverflowToolbarLayoutData) {
 	"use strict";
 
 	// shortcut for sap.m.OverflowToolbarPriority

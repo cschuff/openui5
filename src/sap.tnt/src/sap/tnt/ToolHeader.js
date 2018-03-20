@@ -3,9 +3,22 @@
  */
 
 // Provides control sap.tnt.ToolHeader
-sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control',
-		'sap/m/OverflowToolbar', 'sap/m/OverflowToolbarAssociativePopover'],
-	function(jQuery, library, Control, OverflowToolbar, OverflowToolbarAssociativePopover) {
+sap.ui.define([
+    'jquery.sap.global',
+    './library',
+    'sap/ui/core/Control',
+    'sap/m/OverflowToolbar',
+    'sap/m/OverflowToolbarAssociativePopover',
+    "./ToolHeaderRenderer"
+],
+	function(
+	    jQuery,
+		library,
+		Control,
+		OverflowToolbar,
+		OverflowToolbarAssociativePopover,
+		ToolHeaderRenderer
+	) {
 		"use strict";
 
 
@@ -35,6 +48,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control',
 		 * @public
 		 * @since 1.34
 		 * @alias sap.tnt.ToolHeader
+		 * @see {@link fiori:https://experience.sap.com/fiori-design-web/tool-header/ Tool Header}
 		 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 		 */
 		var ToolHeader = OverflowToolbar.extend("sap.tnt.ToolHeader", /** @lends sap.tnt.ToolHeader.prototype */ {
@@ -58,8 +72,6 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control',
 			OverflowToolbar.prototype.init.apply(this, arguments);
 
 			this.addStyleClass('sapTntToolHeader sapContrast sapContrastPlus');
-
-			this.setHTMLTag(sap.m.IBarHTMLTag.Header);
 		};
 
 		/**

@@ -3,9 +3,32 @@
  */
 
 // Provides control sap.m.TextArea.
-sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/ResizeHandler", './library'],
-	function(jQuery, InputBase, Text, ResizeHandler, library) {
+sap.ui.define([
+	'jquery.sap.global',
+	'./InputBase',
+	'./Text',
+	'sap/ui/core/ResizeHandler',
+	'./library',
+	'sap/ui/core/library',
+	'sap/ui/Device',
+	'./TextAreaRenderer'
+],
+function(
+	jQuery,
+	InputBase,
+	Text,
+	ResizeHandler,
+	library,
+	coreLibrary,
+	Device,
+	TextAreaRenderer
+	) {
 	"use strict";
+
+
+
+	// shortcut for sap.ui.core.Wrapping
+	var Wrapping = coreLibrary.Wrapping;
 
 
 
@@ -59,11 +82,13 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 	 * @public
 	 * @since 1.9.0
 	 * @alias sap.m.TextArea
+	 * @see {@link fiori:https://experience.sap.com/fiori-design-web/text-area/ Text Area}
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	var TextArea = InputBase.extend("sap.m.TextArea", /** @lends sap.m.TextArea.prototype */ { metadata : {
 
 		library : "sap.m",
+		designtime: "sap/m/designtime/TextArea.designtime",
 		properties : {
 
 			/**
@@ -101,7 +126,7 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 			/**
 			 * Indicates how the control wraps the text, e.g. <code>Soft</code>, <code>Hard</code>, <code>Off</code>.
 			 */
-			wrapping : {type : "sap.ui.core.Wrapping", group : "Behavior", defaultValue : sap.ui.core.Wrapping.None},
+			wrapping : {type : "sap.ui.core.Wrapping", group : "Behavior", defaultValue : Wrapping.None},
 
 			/**
 			 * Indicates when the <code>value</code> property gets updated with the user changes. Setting it to <code>true</code> updates the <code>value</code> property whenever the user has modified the text shown on the text area.
@@ -216,7 +241,7 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 						parseFloat(oStyle.paddingTop) + parseFloat(oStyle.borderTopWidth) + parseFloat(oStyle.borderBottomWidth);
 
 				// bottom padding is out of scrolling content in firefox
-				if (sap.ui.Device.browser.firefox) {
+				if (Device.browser.firefox) {
 					fMaxHeight += parseFloat(oStyle.paddingBottom);
 				}
 
@@ -228,7 +253,7 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 
 		this._updateMaxLengthAttribute();
 
-		if (!sap.ui.Device.support.touch) {
+		if (!Device.support.touch) {
 			return;
 		}
 
@@ -307,6 +332,9 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 	TextArea.prototype.setValue = function (sValue) {
 		InputBase.prototype.setValue.call(this, sValue);
 		this._handleShowExceededText();
+		if (this.getGrowing()) {
+			this._adjustHeight();
+		}
 		return this;
 	};
 
@@ -357,7 +385,7 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 
 		// handle growing
 		if (this.getGrowing()) {
-			this._adjustHeight(oTextAreaRef);
+			this._adjustHeight();
 		}
 
 		this.fireLiveChange({
@@ -374,6 +402,7 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 	 * The event is customized and the <code>textArea</code> value is calculated manually
 	 * because when the <code>showExceededText</code> is set to
 	 * <code>true</code> the exceeded text should be selected on paste.
+	 * @param {jQuery.Event} oEvent The event object
 	 */
 	TextArea.prototype.onpaste = function (oEvent) {
 		if (this.getShowExceededText()) {
@@ -393,7 +422,15 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 
 	TextArea.prototype._adjustHeight = function() {
 		var oTextAreaRef = this.getFocusDomRef(),
-			fHeight = oTextAreaRef.scrollHeight + oTextAreaRef.offsetHeight - oTextAreaRef.clientHeight;
+			fHeight;
+
+		if (!oTextAreaRef) {
+			return;
+		}
+		//Reset dimensions
+		oTextAreaRef.style.height = "auto";
+		// Calc dimensions of the changed content
+		fHeight = oTextAreaRef.scrollHeight + oTextAreaRef.offsetHeight - oTextAreaRef.clientHeight;
 
 		if (this.getValue() && fHeight !== 0) {
 			oTextAreaRef.style.height = fHeight + "px";
@@ -464,7 +501,8 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 
 	/**
 	 * Checks if the TextArea has exceeded the value for MaxLength
-	 * @return {boolean}
+	 * @param {number} bValue The value
+	 * @returns {boolean} True if the text area exceeded the max length
 	 * @private
 	 */
 	TextArea.prototype._maxLengthIsExceeded = function (bValue) {
@@ -497,7 +535,7 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 			INSIDE_SCROLLABLE_WITHOUT_FOCUS : oDevice.os.ios || oDevice.os.blackberry || oDevice.browser.chrome,
 			PAGE_NON_SCROLLABLE_AFTER_FOCUS : oDevice.os.android && oDevice.os.version >= 4.1
 		};
-	}(sap.ui.Device));
+	}(Device));
 
 
 	/**
@@ -548,11 +586,11 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 	};
 
 	// Flag for the Fiori Client on Windows Phone
-	var _bMSWebView = sap.ui.Device.os.windows_phone && (/MSAppHost/i).test(navigator.appVersion);
+	var _bMSWebView = Device.os.windows_phone && (/MSAppHost/i).test(navigator.appVersion);
 
 	/**
 	 * Special handling for the focusing issue in SAP Fiori Client on Windows Phone.
-	 *
+	 * @param {jQuery.Event} oEvent The event object
 	 * @private
 	 */
 	TextArea.prototype.onfocusin = function(oEvent) {
@@ -584,4 +622,4 @@ sap.ui.define(['jquery.sap.global', './InputBase', './Text', "sap/ui/core/Resize
 
 	return TextArea;
 
-}, /* bExport= */ true);
+});

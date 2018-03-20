@@ -22,7 +22,7 @@ function(
 			var oGroup = this.oView.byId("GroupEntityType01");
 			return Promise.all([
 				this.oView.getController().isDataReady(),
-				ElementUtil.loadDesignTimeMetadata(oGroup).then(function(oDesignTime) {
+				oGroup.getMetadata().loadDesignTime().then(function(oDesignTime) {
 					this.mAddODataPropertyAction = oDesignTime.aggregations.formElements.actions.addODataProperty;
 				}.bind(this))
 			]);
@@ -39,7 +39,7 @@ function(
 		var aFormElements = oSimpleForm.getAggregation("form").getFormContainers().reduce(function(aAllFormElements, oFormContainer){
 			return aAllFormElements.concat(oFormContainer.getFormElements());
 		},[]).filter(function(oFormElement){
-			return oFormElement.getVisible() === false;
+			return oFormElement.isVisible() === false;
 		});
 
 		var oActionsObject = {
@@ -77,7 +77,7 @@ function(
 		var aFormElements = oSimpleForm.getAggregation("form").getFormContainers().reduce(function(aAllFormElements, oFormContainer){
 			return aAllFormElements.concat(oFormContainer.getFormElements());
 		},[]).filter(function(oFormElement){
-			return oFormElement.getVisible() === false;
+			return oFormElement.isVisible() === false;
 		});
 		oSimpleFormWithJSONModel.setModel(new JSONModel({elements: "foo"}));
 

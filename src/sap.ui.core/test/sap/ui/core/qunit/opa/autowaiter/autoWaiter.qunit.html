@@ -34,9 +34,13 @@
 		sap.ui.require([
 			"sap/ui/test/opaQunit",
 			"unitTests/utils/customQUnitAssertions",
-			"unitTests/autowaiter/_XHRCounter",
-			"unitTests/autowaiter/_timeoutCounter",
-			"unitTests/autowaiter/_autoWaiterAsync"
+			"unitTests/autowaiter/_navigationContainerWaiter",
+			"unitTests/autowaiter/_timeoutWaiter",
+			"unitTests/autowaiter/_promiseWaiter",
+			"unitTests/autowaiter/_autoWaiterAsync",
+			"unitTests/autowaiter/_autoWaiterLogCollector",
+			"unitTests/autowaiter/_utils",
+			"unitTests/autowaiter/_XHRWaiter"
 		], function (opaTest) {
 			QUnit.start();
 		});

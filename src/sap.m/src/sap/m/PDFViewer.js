@@ -2,8 +2,6 @@
  * ${copyright}
  */
 
-/* global ActiveXObject:false */
-
 // Provides control sap.m.PDFViewer.
 sap.ui.define([
 		"jquery.sap.global",
@@ -11,20 +9,12 @@ sap.ui.define([
 		"sap/ui/core/Control",
 		"sap/ui/Device",
 		"sap/m/PDFViewerRenderManager",
-		"sap/m/MessageBox"
+		"sap/m/MessageBox",
+		"sap/m/PDFViewerRenderer"
 	],
-	function (jQuery, library, Control, Device, PDFViewerRenderManager, MessageBox) {
+	function (jQuery, library, Control, Device, PDFViewerRenderManager, MessageBox, PDFViewerRenderer) {
 		"use strict";
 
-		var aAllowedMimeTypes = Object.freeze([
-			"application/pdf",
-			"application/x-google-chrome-pdf"
-		]);
-
-		function isSupportedMimeType(sMimeType) {
-			var iFoundIndex = aAllowedMimeTypes.indexOf(sMimeType);
-			return iFoundIndex > -1;
-		}
 
 		/**
 		 * Definition of PDFViewer control
@@ -33,12 +23,15 @@ sap.ui.define([
 		 * @param {object} [mSettings] initial settings for the new control
 		 *
 		 * @class
-		 * This control enables you to display PDF documents within your app.
-		 * It can be embedded in your user interface layout, or you can set it to open in a popup dialog.
+		 * <p>This control enables you to display PDF documents within your app.
+		 * It can be embedded in your user interface layout, or you can set it to open in a popup dialog.</p>
+		 * <p>Please note that the PDF Viewer control can be fully displayed on desktop devices only. On mobile
+		 * devices, only the toolbar with a download button is visible.</p>
 		 * @extends sap.ui.core.Control
 		 *
 		 * @author SAP SE
 		 * @version ${version}
+		 * @since 1.48
 		 *
 		 * @constructor
 		 * @public
@@ -63,12 +56,15 @@ sap.ui.define([
 						width: {type: "sap.ui.core.CSSSize", group: "Dimension", defaultValue: "100%"},
 						/**
 						 * Specifies the path to the PDF file to display. Can be set to a relative or
-						 * an absolute path.
+						 * an absolute path.<br>
+						 * Optionally, this property can also be set to a data URI path or a blob URL
+						 * in all major web browsers except Internet Explorer and Microsoft Edge, provided
+						 * that this data URI or blob URL is whitelisted in advance.
 						 */
 						source: {type: "sap.ui.core.URI", group: "Misc", defaultValue: null},
 						/**
 						 * A custom error message that is displayed when the PDF file cannot be loaded.
-						 * @deprecated As of version 1.50.0, replaced by {@link sap.m.PDFViewer#getErrorPlaceholderMessage()}.
+						 * @deprecated As of version 1.50.0, replaced by {@link sap.m.PDFViewer#getErrorPlaceholderMessage}.
 						 */
 						errorMessage: {type: "string", group: "Misc", defaultValue: null, deprecated: true},
 						/**
@@ -79,7 +75,7 @@ sap.ui.define([
 						/**
 						 * A custom title for the PDF viewer popup dialog. Works only if the PDF viewer
 						 * is set to open in a popup dialog.
-						 * @deprecated As of version 1.50.0, replaced by {@link sap.m.PDFViewer#getTitle()}.
+						 * @deprecated As of version 1.50.0, replaced by {@link sap.m.PDFViewer#getTitle}.
 						 */
 						popupHeaderTitle: {type: "string", group: "Misc", defaultValue: null, deprecated: true},
 
@@ -129,39 +125,6 @@ sap.ui.define([
 				}
 			});
 
-		/**
-		 * @returns {boolean}
-		 * @private
-		 */
-		PDFViewer._isPdfPluginEnabled = function () {
-			var bIsEnabled = true;
-			if (Device.browser.firefox) {
-				// https://bugzilla.mozilla.org/show_bug.cgi?id=1293406
-				// mimeType is missing for firefox even though it is enabled
-				return bIsEnabled;
-			}
-
-			if (Device.browser.internet_explorer) {
-				// hacky code how to recognize that pdf plugin is installed and enabled
-				try {
-					/* eslint-disable no-new */
-					new ActiveXObject("AcroPDF.PDF");
-					/* eslint-enable no-new */
-				} catch (e) {
-					bIsEnabled = false;
-				}
-
-				return bIsEnabled;
-			}
-
-			var aMimeTypes = navigator.mimeTypes;
-			bIsEnabled = aAllowedMimeTypes.some(function (sAllowedMimeType) {
-				var oMimeTypeItem = aMimeTypes.namedItem(sAllowedMimeType);
-				return oMimeTypeItem !== null;
-			});
-
-			return bIsEnabled;
-		};
 
 		/**
 		 * Lifecycle method
@@ -263,8 +226,12 @@ sap.ui.define([
 					sParametrizedSource = sParametrizedSource.substr(0, iCrossPosition);
 				}
 				sParametrizedSource += "#view=FitH";
+				if (!jQuery.sap.validateUrl(sParametrizedSource)) {
+					sParametrizedSource = encodeURI(sParametrizedSource);
+				}
+
 				if (jQuery.sap.validateUrl(sParametrizedSource)) {
-					oIframeElement.attr("src", encodeURI(sParametrizedSource));
+					oIframeElement.attr("src", sParametrizedSource);
 				} else {
 					this._fireErrorEvent();
 				}
@@ -348,8 +315,7 @@ sap.ui.define([
 						return;
 					}
 				}
-
-				if (bContinue && isSupportedMimeType(sCurrentContentType)) {
+				if (bContinue && PDFViewerRenderer._isSupportedMimeType(sCurrentContentType)) {
 					this._fireLoadedEvent();
 				} else {
 					this._fireErrorEvent();
@@ -415,7 +381,7 @@ sap.ui.define([
 				return;
 			}
 
-			if (!isSupportedMimeType(sCurrentContentType)) {
+			if (!PDFViewerRenderer._isSupportedMimeType(sCurrentContentType)) {
 				this._fireErrorEvent();
 			}
 		};
@@ -459,7 +425,7 @@ sap.ui.define([
 		 * @private
 		 */
 		PDFViewer.prototype._shouldRenderPdfContent = function () {
-			return PDFViewer._isPdfPluginEnabled() && this._bRenderPdfContent && this.getSource() !== null;
+			return PDFViewerRenderer._isPdfPluginEnabled() && this._bRenderPdfContent && this.getSource() !== null;
 		};
 
 		/**
@@ -582,7 +548,15 @@ sap.ui.define([
 		 * @private
 		 */
 		PDFViewer.prototype._getRenderHeight = function () {
-			return this._bIsPopupOpen ? '100%' : this.getHeight();
+			if (this._bIsPopupOpen) {
+				return '100%';
+			}
+
+			if (!this._isEmbeddedModeAllowed()) {
+				return 'auto';
+			}
+
+			return this.getHeight();
 		};
 
 		/**
@@ -617,4 +591,4 @@ sap.ui.define([
 		PDFViewerRenderManager.extendPdfViewer(PDFViewer);
 
 		return PDFViewer;
-	}, /* bExport= */ true);
+	});

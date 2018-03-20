@@ -40,14 +40,13 @@ sap.ui.require([
 		//*****************************************************************************************
 		QUnit.module(sName, {
 			beforeEach : function () {
-				this.oLogMock = sinon.mock(jQuery.sap.log);
+				this.oLogMock = this.mock(jQuery.sap.log);
 				this.oLogMock.expects("warning").never();
 				this.oLogMock.expects("error").never();
 				sap.ui.getCore().getConfiguration().setLanguage("en-US");
 				oType = createType();
 			},
 			afterEach : function () {
-				this.oLogMock.verify();
 				sap.ui.getCore().getConfiguration().setLanguage(sDefaultLanguage);
 			}
 		});
@@ -266,6 +265,18 @@ sap.ui.require([
 				oType.formatValue(42, "string");
 				sinon.assert.calledWithExactly(oSpy, oFixture.expect);
 			});
+		});
+
+		QUnit.test("format: bad input type", function (assert) {
+			var oBadModelValue = new Date(),
+				oType = createType();
+
+			["string", "int", "float"].forEach(function (sTargetType) {
+				assert.throws(function () {
+					oType.formatValue(oBadModelValue, sTargetType);
+				}, new FormatException("Illegal " + sName + " value: " + oBadModelValue));
+			});
+			assert.strictEqual(oType.formatValue(oBadModelValue, "any"), oBadModelValue);
 		});
 	}
 

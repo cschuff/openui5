@@ -9,7 +9,7 @@ sap.ui.define([
 
 	opaTest("Should navigate to a product detail page by pressing the product link of the first product tile", function (Given, When, Then) {
 		// Arrangements
-		Given.iStartTheApp();
+		Given.iStartMyApp();
 		//Actions
 		When.onTheWelcomePage.iLookAtTheScreen();
 		When.onTheWelcomePage.iPressTheProductLink();
@@ -19,7 +19,7 @@ sap.ui.define([
 
 	opaTest("Should press back button and navigate to welcome view", function (Given, When, Then) {
 		// Actions
-		When.onTheProduct.iPressTheBackButton();
+		When.onTheCategory.iPressTheBackButtonInProduct();
 		// Assertions
 		Then.onTheWelcomePage.iShouldSeeTheWelcomePage();
 	});

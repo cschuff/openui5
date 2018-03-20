@@ -16,7 +16,7 @@ sap.ui.require([
 	"sap/ui/test/TestUtils"
 ], function (jQuery, Control, DateFormat, FormatException, JSONModel, ParseException,
 		ValidateException, DateTime, DateTimeBase, DateTimeOffset, ODataType, TestUtils) {
-	/*global QUnit, sinon */
+	/*global QUnit */
 	/*eslint no-warning-comments: 0 */
 	"use strict";
 
@@ -74,13 +74,12 @@ sap.ui.require([
 	function module(sTitle) {
 		QUnit.module(sTitle, {
 			beforeEach : function () {
-				this.oLogMock = sinon.mock(jQuery.sap.log);
+				this.oLogMock = this.mock(jQuery.sap.log);
 				this.oLogMock.expects("warning").never();
 				this.oLogMock.expects("error").never();
 				sap.ui.getCore().getConfiguration().setLanguage("en-US");
 			},
 			afterEach : function () {
-				this.oLogMock.verify();
 				sap.ui.getCore().getConfiguration().setLanguage(sDefaultLanguage);
 			}
 		});
@@ -285,7 +284,25 @@ sap.ui.require([
 			assert.equal(oFormat.format(oDateTime), oDateTime, "format");
 			assert.equal(oFormat.parse(sFormattedDateTime), sFormattedDateTime, "parse");
 		});
+
+		//*****************************************************************************************
+		QUnit.test("format: bad input type", function (assert) {
+			var oBadModelValue = "foo",
+				oType = createInstance(sTypeName);
+
+			assert.throws(function () {
+				oType.formatValue(oBadModelValue, "string");
+			}, new FormatException("Illegal " + oType.getName() + " value: " + oBadModelValue));
+			assert.strictEqual(oType.formatValue(oBadModelValue, "any"), oBadModelValue);
+		});
 	}
+
+	//*********************************************************************************************
+	QUnit.test("DateTimeBase constraints undefined", function (assert) {
+		var oType = new DateTimeBase({}, undefined);
+
+		assert.deepEqual(oType.oConstraints, undefined);
+	});
 
 	//*********************************************************************************************
 	//*********************************************************************************************
@@ -305,7 +322,7 @@ sap.ui.require([
 		{i : {nullable : "foo"}, o : undefined, warning : "Illegal nullable: foo"}
 	].forEach(function (oFixture) {
 		QUnit.test("constraints: " + JSON.stringify(oFixture.i) + ")", function (assert) {
-			var oType = new DateTime();
+			var oType;
 
 			if (oFixture.warning) {
 				this.oLogMock.expects("warning")
@@ -535,6 +552,7 @@ sap.ui.require([
 
 		oDateTimeOffset0.validateValue("2000-01-01T16:00:00Z");
 		throws(oDateTimeOffset0, "2000-01-01T16:00:00.0Z");
+		throws(oDateTimeOffset0, undefined);
 
 		// @see _AnnotationHelperExpression.qunit.js
 		[

@@ -3,8 +3,8 @@
  */
 
 // Provides the base implementation for all model implementations
-sap.ui.define(['sap/ui/base/DataType', './FormatException', './ParseException', './Type', './ValidateException'],
-	function(DataType, FormatException, ParseException, Type, ValidateException) {
+sap.ui.define(['sap/ui/base/DataType', './Type', './FormatException', './ParseException', './ValidateException'],
+	function(DataType, Type /*, kept for compatibility with existing referers: FormatException, ParseException, ValidateException*/) {
 	"use strict";
 
 	var oModelFormat = {
@@ -28,7 +28,6 @@ sap.ui.define(['sap/ui/base/DataType', './FormatException', './ParseException', 
 	 * @author SAP SE
 	 * @version ${version}
 	 *
-	 * @constructor
 	 * @param {object} [oFormatOptions] options as provided by concrete subclasses
 	 * @param {object} [oConstraints] constraints as supported by concrete subclasses
 	 * @public
@@ -154,6 +153,21 @@ sap.ui.define(['sap/ui/base/DataType', './FormatException', './ParseException', 
 			default:
 				var oInternalType = DataType.getType(sInternalType);
 				return oInternalType && oInternalType.getPrimitiveType().getName();
+		}
+	};
+
+	/**
+	 * Combine message texts.
+	 * Join multiple messages into a combined message text
+	 *
+	 * @param {array} aMessages an array of message strings
+	 * @return {string} the combined message text
+	 */
+	SimpleType.prototype.combineMessages = function(aMessages) {
+		if (aMessages.length === 1) {
+			return aMessages[0];
+		} else {
+			return aMessages.join(". ") + ".";
 		}
 	};
 

@@ -4,31 +4,21 @@
 
 sap.ui.define([
 	"jquery.sap.global",
-	"sap/ui/core/mvc/Controller",
+	"sap/ui/support/supportRules/ui/controllers/BaseController",
 	"sap/ui/model/json/JSONModel",
 	"sap/ui/support/supportRules/WindowCommunicationBus",
 	"sap/ui/support/supportRules/ui/models/SharedModel",
 	"sap/ui/support/supportRules/ui/external/ElementTree",
 	"sap/ui/support/supportRules/IssueManager",
 	"sap/ui/support/supportRules/WCBChannels",
-	"sap/ui/support/supportRules/ui/models/formatter"
-], function ($, Controller, JSONModel, CommunicationBus, SharedModel, ElementTree, IssueManager, channelNames, formatter) {
+	"sap/ui/support/supportRules/ui/models/formatter",
+	"sap/ui/support/supportRules/Constants",
+	"sap/m/OverflowToolbarAssociativePopoverControls"
+], function ($, BaseController, JSONModel, CommunicationBus, SharedModel, ElementTree, IssueManager, channelNames, formatter, constants, OverflowToolbarAssociativePopoverControls) {
 	"use strict";
 
 	var mIssueSettings = {
-		severitytexts: {
-			High: "High",
-			Medium: "Medium",
-			Low: "Low",
-			All: "All Severities"
-		},
-		severitystates: {
-			High: "Error",
-			Medium: "Warning",
-			Low: "None",
-			All: "None"
-		},
-		severityicons: {
+		severityIcons: {
 			High: "sap-icon://message-error",
 			Medium: "sap-icon://message-warning",
 			Low: "sap-icon://message-information",
@@ -36,7 +26,7 @@ sap.ui.define([
 		}
 	};
 
-	return Controller.extend("sap.ui.support.supportRules.ui.controllers.Issues", {
+	return BaseController.extend("sap.ui.support.supportRules.ui.controllers.Issues", {
 		ISSUES_LIMIT : 1000,
 		formatter: formatter,
 		onInit: function () {
@@ -46,8 +36,20 @@ sap.ui.define([
 			this.getView().setModel(this.model);
 			this.clearFilters();
 			this._initElementTree();
-			this.treeTable = this.getView().byId("issuesList");
-			this.issueTable = this.getView().byId("issueTable");
+			this.treeTable = this.byId("issuesList");
+			this.issueTable = this.byId("issueTable");
+			this.toolHeader = this.byId('toolHeader');
+			this.toolHeader.removeStyleClass('sapTntToolHeader sapContrast sapContrastPlus');
+
+			var toolHeaderPopover = this.toolHeader._getPopover();
+			toolHeaderPopover.removeStyleClass('sapTntToolHeaderPopover sapContrast sapContrastPlus');
+
+			// add VerticalLayout to the controls, which can overflow
+			OverflowToolbarAssociativePopoverControls._mSupportedControls["sap.ui.layout.VerticalLayout"] = {
+				canOverflow: true,
+				listenForEvents: [],
+				noInvalidationProps: []
+			};
 		},
 		setCommunicationSubscriptions: function () {
 
@@ -76,7 +78,7 @@ sap.ui.define([
 				this.model.setProperty("/issues", data.issues);
 				this.model.setProperty('/analyzePressed', true);
 				this.model.setProperty("/issuesCount", this.data.issues.length);
-				this.model.setProperty("/selectedIssue", "");
+				this.model.setProperty("/selectedIssue", null);
 				this.elementTree.setData({
 					controls: data.elementTree,
 					issuesIds: problematicControlsIds
@@ -112,7 +114,7 @@ sap.ui.define([
 			});
 		},
 		onAfterRendering: function () {
-			this.elementTree.setContainerId(this.getView().byId("elementTreeContainer").getId());
+			this.elementTree.setContainerId(this.byId("elementTreeContainer").getId());
 		},
 		clearFilters: function () {
 			this.model.setProperty("/severityFilter", "All");
@@ -137,19 +139,20 @@ sap.ui.define([
 		},
 		onRowSelectionChanged: function (event) {
 			if (event.getParameter("rowContext")) {
-				var selection = event.getParameter("rowContext").getObject();
+				var selection = event.getParameter("rowContext").getObject(),
+					visibleRowCount = constants.MAX_VISIBLE_ISSUES_FOR_RULE;
+
 				if (selection.type === "rule") {
 					this._setSelectedRule(selection);
 				} else {
-					this.model.setProperty("/selectedIssue", "");
+					this.model.setProperty("/selectedIssue", null);
 				}
-				if (selection.issueCount < 4 ) {
-					this._setPropertiesOfResponsiveDetailsAndTable("Fixed", "inherit");
-					this.model.setProperty("/visibleRowCount", 4);
 
-				} else {
-					this._setPropertiesOfResponsiveDetailsAndTable("Auto", "5rem");
+				if (selection.issueCount < visibleRowCount) {
+					visibleRowCount = selection.issueCount;
 				}
+
+				this.model.setProperty("/visibleRowCount", visibleRowCount);
 			}
 
 		},
@@ -178,15 +181,6 @@ sap.ui.define([
 				audienseFilterApplied =  $.inArray( audFilter, issue.audiences ) > -1 || audFilter === 'All';
 
 			return sevFilterApplied && catFilterApplied && elementFilterApplied && audienseFilterApplied;
-		},
-		filterSevirityIcon: function(sValue) {
-			return mIssueSettings.severityicons[sValue];
-		},
-		filterSevirityState: function(sValue) {
-			return mIssueSettings.severitystates[sValue];
-		},
-		filterSevirityText: function(sValue) {
-			return mIssueSettings.severitytexts[sValue];
 		},
 		setToolbarHeight: function() {
 				this.model.setProperty("/filterBarHeight", "4rem");
@@ -226,13 +220,35 @@ sap.ui.define([
 				this.issueTable.setSelectedIndex(0);
 				this.model.setProperty("/selectedIssue/details", selectionCopy.details);
 				this.model.setProperty("/selectedIssue", selectionCopy);
+				this._setIconAndColorToIssue(selectionCopy.issues);
 			} else {
-			this.model.setProperty("/selectedIssue", "");
+				this.model.setProperty("/selectedIssue", null);
 			}
 		},
-		_setPropertiesOfResponsiveDetailsAndTable: function(visibleRowCountMode, heightDetailsArea){
-			this.model.setProperty("/visibleRowCountMode", visibleRowCountMode);
-			this.model.setProperty("/heightDetailsArea", heightDetailsArea);
+
+		/**
+		 * Set to model icon and color depending on severity.
+		 * @private
+		 * @param {array} aIssues
+		 * @returns {void}
+		 */
+		_setIconAndColorToIssue: function(aIssues) {
+			aIssues.forEach(function(element){
+				switch (element.severity) {
+					case constants.SUPPORT_ASSISTANT_ISSUE_SEVERITY_LOW:
+						element.severityIcon = mIssueSettings.severityIcons.Low;
+						element.severityColor = constants.SUPPORT_ASSISTANT_SEVERITY_LOW_COLOR;
+						break;
+					case constants.SUPPORT_ASSISTANT_ISSUE_SEVERITY_MEDIUM:
+						element.severityIcon = mIssueSettings.severityIcons.Medium;
+						element.severityColor = constants.SUPPORT_ASSISTANT_SEVERITY_MEDIUM_COLOR;
+						break;
+					case constants.SUPPORT_ASSISTANT_ISSUE_SEVERITY_HIGH:
+						element.severityIcon = mIssueSettings.severityIcons.High;
+						element.severityColor = constants.SUPPORT_ASSISTANT_SEVERITY_HIGH_COLOR;
+						break;
+				}
+			});
 		}
 	});
 });

@@ -1,24 +1,24 @@
-sap.ui.define([
-	'jquery.sap.global', 'sap/ui/core/XMLComposite'], 
-    function(jQuery, XMLComposite) {
-	"use strict";
-	var ForwardText = sap.ui.core.XMLComposite.extend("composites.ForwardText", {
-		metadata: {
-			aggregations: {
-				textItems: {
-					type: "sap.m.Text",
-					multiple: true,
-					invalidate: true
+sap.ui.define(['sap/ui/core/XMLComposite'],
+	function (XMLComposite) {
+		"use strict";
+		var ForwardText = sap.ui.core.XMLComposite.extend("composites.ForwardText", {
+			metadata: {
+				aggregations: {
+					textItems: {
+						type: "sap.ui.core.Control",
+						multiple: true,
+						invalidate: true,
+						forwarding: { idSuffix: "--innerVBox", aggregation: "items" }
+					},
+					text: {
+						type: "sap.ui.core.Control",
+						multiple: false,
+						forwarding: { idSuffix: "--innerControlContainer", aggregation: "content" }
+					}
 				},
-				text: {
-					type: "sap.m.Text",
-					multiple: false
-				}
-			},
-			defaultAggregation: "textItems"
-		},
-		alias: "forwardtext"
-	});
-	
-	return ForwardText;
-}, /* bExport= */true);
+				defaultAggregation: "textItems"
+			}
+		});
+
+		return ForwardText;
+	}, /* bExport= */true);

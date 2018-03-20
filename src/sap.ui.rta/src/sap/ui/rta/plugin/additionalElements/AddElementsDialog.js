@@ -123,7 +123,7 @@ sap.ui.define([
 		this._oInput =  new SearchField({
 			width : "100%",
 			liveChange : [this._updateModelFilter, this]
-		}).addStyleClass("resourceListIF");
+		});
 
 		// Button for sorting the List
 		var oResortButton = new Button({
@@ -193,8 +193,8 @@ sap.ui.define([
 				{
 					mode : "MultiSelect",
 					includeItemInSelection : true,
-					growing : false,
-					growingScrollToLoad : false
+					growing : true,
+					growingScrollToLoad : true
 				}).setNoDataText(this._oTextResources.getText("MSG_NO_FIELDS", this._oTextResources.getText("MULTIPLE_CONTROL_NAME").toLowerCase()));
 
 		var oListItem = new ListItem({
@@ -271,7 +271,7 @@ sap.ui.define([
 	 * Open the Field Repository Dialog
 	 *
 	 * @param {sap.ui.core.Control} oControl Currently selected control
-	 * @returns {promise} empty promise
+	 * @returns {Promise} empty promise
 	 * @public
 	 */
 	AddElementsDialog.prototype.open = function(oControl) {

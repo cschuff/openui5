@@ -241,26 +241,56 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/URI', 'jquery.sap.strings
 	});
 	rTokens = new RegExp(aTokens.join("|"), "g");
 
-	addInfix("*", 14, function (x, y) { return x * y; });
-	addInfix("/", 14, function (x, y) { return x / y; });
-	addInfix("%", 14, function (x, y) { return x % y; });
-	addInfix("+", 13, function (x, y) { return x + y; }).nud = function (oToken, oParser) {
-		return UNARY.bind(null, oParser.expression(this.lbp),
-			function (x) { return +x; });
+	addInfix("*", 14, function (x, y) {
+		return x * y;
+	});
+	addInfix("/", 14, function (x, y) {
+		return x / y;
+	});
+	addInfix("%", 14, function (x, y) {
+		return x % y;
+	});
+	addInfix("+", 13, function (x, y) {
+		return x + y;
+	}).nud = function (oToken, oParser) {
+		return UNARY.bind(null, oParser.expression(this.lbp), function (x) {
+			return +x;
+		});
 	};
-	addInfix("-", 13, function (x, y) { return x - y; }).nud = function (oToken, oParser) {
-		return UNARY.bind(null, oParser.expression(this.lbp),
-				function (x) { return -x; });
+	addInfix("-", 13, function (x, y) {
+		return x - y;
+	}).nud = function (oToken, oParser) {
+		return UNARY.bind(null, oParser.expression(this.lbp), function (x) {
+			return -x;
+		});
 	};
-	addInfix("<=", 11, function (x, y) { return x <= y; });
-	addInfix("<", 11, function (x, y) { return x < y; });
-	addInfix(">=", 11, function (x, y) { return x >= y; });
-	addInfix(">", 11, function (x, y) { return x > y; });
-	addInfix("in", 11, function (x, y) { return x in y; });
-	addInfix("===", 10, function (x, y) { return x === y; });
-	addInfix("!==", 10, function (x, y) { return x !== y; });
-	addInfix("&&", 7, function (x, fnY) { return x && fnY(); }, true);
-	addInfix("||", 6, function (x, fnY) { return x || fnY(); }, true);
+	addInfix("<=", 11, function (x, y) {
+		return x <= y;
+	});
+	addInfix("<", 11, function (x, y) {
+		return x < y;
+	});
+	addInfix(">=", 11, function (x, y) {
+		return x >= y;
+	});
+	addInfix(">", 11, function (x, y) {
+		return x > y;
+	});
+	addInfix("in", 11, function (x, y) {
+		return x in y;
+	});
+	addInfix("===", 10, function (x, y) {
+		return x === y;
+	});
+	addInfix("!==", 10, function (x, y) {
+		return x !== y;
+	});
+	addInfix("&&", 7, function (x, fnY) {
+		return x && fnY();
+	}, true);
+	addInfix("||", 6, function (x, fnY) {
+		return x || fnY();
+	}, true);
 
 	//Formatter functions to evaluate symbols like literals or operators in the expression grammar
 	/**
@@ -280,7 +310,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/URI', 'jquery.sap.strings
 
 	/**
 	 * Formatter function for an embedded binding.
-	 * @param {number} i - the index of the binding as it appears when reading the
+	 * @param {int} i - the index of the binding as it appears when reading the
 	 *   expression from the left
 	 * @param {any[]} aParts - the array of binding values
 	 * @returns {any} the binding value
@@ -402,7 +432,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/URI', 'jquery.sap.strings
 	 * Adds the infix operator with the given id, binding power and formatter function to the
 	 * symbol table.
 	 * @param {string} sId - the id of the infix operator
-	 * @param {number} iBindingPower - the binding power = precedence of the infix operator
+	 * @param {int} iBindingPower - the binding power = precedence of the infix operator
 	 * @param {function} fnOperator - the function to evaluate the operator
 	 * @param {boolean} [bLazy=false] - whether the right operand is lazily evaluated
 	 * @return {object} the newly created symbol for the infix operator
@@ -432,7 +462,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/URI', 'jquery.sap.strings
 	 *
 	 * @param {string} sMessage - the error message
 	 * @param {string} sInput - the input string
-	 * @param {number} [iAt] - the index in the input string where the error occurred; the index
+	 * @param {int} [iAt] - the index in the input string where the error occurred; the index
 	 *   starts counting at 1 to be consistent with positions provided in tokenizer error messages.
 	 */
 	function error(sMessage, sInput, iAt) {
@@ -461,7 +491,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/URI', 'jquery.sap.strings
 	 * uses fnResolveBinding to resolve bindings embedded in the expression.
 	 * @param {function} fnResolveBinding - the function to resolve embedded bindings
 	 * @param {string} sInput - the string to be parsed
-	 * @param {number} [iStart=0] - the index to start parsing
+	 * @param {int} [iStart=0] - the index to start parsing
 	 * @returns {object} Tokenization result object with the following properties
 	 *   at: the index after the last character consumed by the tokenizer in the input string
 	 *   parts: array with parts corresponding to resolved embedded bindings
@@ -478,11 +508,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/URI', 'jquery.sap.strings
 		 * Saves the binding as a part. Reuses an existing part if the binding is identical.
 		 * @param {object} oBinding
 		 *   the binding to save
-		 * @param {number} iStart
+		 * @param {int} iStart
 		 *   the binding's start index in the input string
 		 * @param {boolean} [bTargetTypeAny=false]
 		 *   whether the binding's "targetType" should default to "any" (recursively, for all parts)
-		 * @returns {number}
+		 * @returns {int}
 		 *   the index at which it has been saved/found in aParts
 		 */
 		function saveBindingAsPart(oBinding, iStart, bTargetTypeAny) {
@@ -780,7 +810,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/URI', 'jquery.sap.strings
 		 *
 		 * @param {function} fnResolveBinding - the function to resolve embedded bindings
 		 * @param {string} sInput - the string to be parsed
-		 * @param {number} [iStart=0] - the index to start parsing
+		 * @param {int} [iStart=0] - the index to start parsing
 		 * @param {object} [mGlobals]
 		 *   global variables allowed in the expression as map of variable name to its value
 		 * @returns {object} the parse result with the following properties

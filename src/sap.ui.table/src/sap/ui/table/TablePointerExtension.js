@@ -4,14 +4,16 @@
 
 // Provides helper sap.ui.table.TablePointerExtension.
 sap.ui.define([
-	"./library", "jquery.sap.global", "./TableExtension", "./TableUtils", "sap/ui/Device", "sap/ui/core/Popup", "jquery.sap.dom"
-], function(library, jQuery, TableExtension, TableUtils, Device, Popup, jQueryDom) {
+"./library", "jquery.sap.global", "./TableExtension", "./TableUtils", "sap/ui/Device", "sap/ui/core/Popup"
+], function(library, jQuery, TableExtension, TableUtils, Device, Popup) {
 	"use strict";
 
 	// shortcuts
 	var SelectionMode = library.SelectionMode;
 
-	var KNOWNCLICKABLECONTROLS = ["sapMBtnBase", "sapMInputBase", "sapMLnk", "sapMSlt", "sapMCb", "sapMRI", "sapMSegBBtn", "sapUiIconPointer"];
+	var KNOWNCLICKABLECONTROLS = [
+		"sapMBtnBase", "sapMInputBase", "sapMLnk", "sapMSlt",
+		"sapMCb", "sapMRI", "sapMSegBBtn", "sapUiIconPointer", "sapMBtnIcon"];
 
 	/*
 	 * Provides utility functions used this extension
@@ -98,8 +100,8 @@ sap.ui.define([
 
 			TableUtils.toggleRowSelection(oTable, $Cell, null, function(iRowIndex) {
 
-				// in case of IE and SHIFT we clear the text selection
-				if (!!Device.browser.internet_explorer && oEvent.shiftKey) {
+				// IE and Edge perform a text selection if holding shift while clicking. This is not desired for range selection of rows.
+				if ((Device.browser.msie || Device.browser.edge) && oEvent.shiftKey) {
 					oTable._clearTextSelection();
 				}
 
@@ -818,14 +820,18 @@ sap.ui.define([
 					} else {
 						oPointerExtension._bHideMenu = true;
 					}
-				} else if (oCellInfo.isOfType(TableUtils.CELLTYPE.DATACELL)) {
-					bMenuOpen = this._oCellContextMenu && this._oCellContextMenu.bOpen;
-					var bMenuOpenedAtAnotherDataCell = bMenuOpen && this._oCellContextMenu.oOpenerRef !== $Cell[0];
-
-					if (!bMenuOpen || bMenuOpenedAtAnotherDataCell) {
+				} else if (oCellInfo.isOfType(TableUtils.CELLTYPE.ANYCONTENTCELL)) {
+					if (TableUtils.Menu.hasContextMenu(this)) {
 						oPointerExtension._bShowMenu = true;
 					} else {
-						oPointerExtension._bHideMenu = true;
+						bMenuOpen = this._oCellContextMenu && this._oCellContextMenu.bOpen;
+						var bMenuOpenedAtAnotherDataCell = bMenuOpen && this._oCellContextMenu.oOpenerRef !== $Cell[0];
+
+						if (!bMenuOpen || bMenuOpenedAtAnotherDataCell) {
+							oPointerExtension._bShowMenu = true;
+						} else {
+							oPointerExtension._bHideMenu = true;
+						}
 					}
 				} else {
 					oPointerExtension._bShowDefaultMenu = true;
@@ -909,7 +915,7 @@ sap.ui.define([
 			} else if (oPointerExtension._bShowMenu) {
 				oEvent.setMarked("handledByPointerExtension");
 				oEvent.preventDefault(); // To prevent opening the default browser context menu.
-				TableUtils.Menu.openContextMenu(this, oEvent.target, false);
+				TableUtils.Menu.openContextMenu(this, oEvent.target, false, null, oEvent);
 				delete oPointerExtension._bShowMenu;
 
 			} else if (oPointerExtension._bHideMenu) {
@@ -1045,7 +1051,7 @@ sap.ui.define([
 	});
 
 	return TablePointerExtension;
-}, /* bExport= */ true);
+	});
 
 /**
  * Gets the pointer extension.

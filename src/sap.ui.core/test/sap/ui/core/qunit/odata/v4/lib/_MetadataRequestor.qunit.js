@@ -4,14 +4,15 @@
 sap.ui.require([
 	"jquery.sap.global",
 	"sap/ui/model/odata/v4/lib/_Helper",
+	"sap/ui/model/odata/v4/lib/_MetadataConverter",
 	"sap/ui/model/odata/v4/lib/_MetadataRequestor",
 	"sap/ui/model/odata/v4/lib/_V2MetadataConverter",
 	"sap/ui/model/odata/v4/lib/_V4MetadataConverter",
 	"sap/ui/test/TestUtils"
-], function (jQuery, _Helper, _MetadataRequestor, _V2MetadataConverter, _V4MetadataConverter,
-		TestUtils) {
+], function (jQuery, _Helper, _MetadataConverter, _MetadataRequestor, _V2MetadataConverter,
+		_V4MetadataConverter, TestUtils) {
 	/*global QUnit, sinon */
-	/*eslint no-warning-comments: 0 */
+	/*eslint max-nested-callbacks: 0, no-warning-comments: 0 */
 	"use strict";
 
 	var mFixture = {
@@ -32,10 +33,12 @@ sap.ui.require([
 	 *   value of "Date" response header
 	 * @param {string} [sLastModified=null]
 	 *   value of "Last-Modified" response header
+	 * @param {string} [sETag=null]
+	 *   value of "ETag" response header
 	 * @returns {object}
 	 *   a mock for jQuery's XHR wrapper
 	 */
-	function createMock(oPayload, bFail, sDate, sLastModified) {
+	function createMock(oPayload, bFail, sDate, sLastModified, sETag) {
 		var jqXHR = new jQuery.Deferred();
 
 		setTimeout(function () {
@@ -50,6 +53,8 @@ sap.ui.require([
 						switch (sName) {
 						case "Date":
 							return sDate || null;
+						case "ETag":
+							return sETag || null;
 						case "Last-Modified":
 							return sLastModified || null;
 						default:
@@ -66,19 +71,14 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.v4.lib._MetadataRequestor", {
 		beforeEach : function () {
-			this.oSandbox = sinon.sandbox.create();
-			TestUtils.useFakeServer(this.oSandbox, "sap/ui/core/qunit/odata/v4/data", mFixture);
-			this.oLogMock = this.oSandbox.mock(jQuery.sap.log);
+			TestUtils.useFakeServer(this._oSandbox, "sap/ui/core/qunit/odata/v4/data", mFixture);
+			this.oLogMock = this.mock(jQuery.sap.log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 
 			// workaround: Chrome extension "UI5 Inspector" calls this method which loads the
 			// resource "sap-ui-version.json" and thus interferes with mocks for jQuery.ajax
-			this.oSandbox.stub(sap.ui, "getVersionInfo");
-		},
-
-		afterEach : function () {
-			this.oSandbox.verifyAndRestore();
+			this.mock(sap.ui).expects("getVersionInfo").atLeast(0);
 		}
 	});
 
@@ -103,30 +103,29 @@ sap.ui.require([
 			this.mock(_Helper).expects("buildQuery")
 				.withExactArgs(sinon.match.same(mQueryParams))
 				.returns("?...");
-
 			oJQueryMock.expects("ajax")
 				.withExactArgs(sUrl + "?...", {
 					headers : sinon.match.same(mHeaders),
 					method : "GET"
 				}).returns(createMock(oExpectedXml));
-
 			if (sODataVersion === "4.0") {
-				this.mock(_V4MetadataConverter).expects("convertXMLMetadata").twice()
+				this.mock(_V4MetadataConverter.prototype).expects("convertXMLMetadata").twice()
 					.withExactArgs(sinon.match.same(oExpectedXml), sUrl)
 					.returns(oExpectedJson);
-				this.mock(_V2MetadataConverter).expects("convertXMLMetadata").never();
+				this.mock(_V2MetadataConverter.prototype).expects("convertXMLMetadata").never();
 			} else {
-				this.mock(_V2MetadataConverter).expects("convertXMLMetadata")
+				this.mock(_V2MetadataConverter.prototype).expects("convertXMLMetadata")
 					.withExactArgs(sinon.match.same(oExpectedXml), sUrl)
 					.returns(oExpectedJson);
-				this.mock(_V4MetadataConverter).expects("convertXMLMetadata")
+				this.mock(_V4MetadataConverter.prototype).expects("convertXMLMetadata")
 					.withExactArgs(sinon.match.same(oExpectedXml), sUrl)
 					.returns(oExpectedJson);
 			}
 
+			// code under test
 			oMetadataRequestor = _MetadataRequestor.create(mHeaders, sODataVersion, mQueryParams);
-			assert.strictEqual(typeof oMetadataRequestor, "object");
 
+			// code under test
 			return oMetadataRequestor.read(sUrl).then(function (oResult) {
 				assert.strictEqual(oResult, oExpectedJson);
 
@@ -143,39 +142,112 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	[false, true].forEach(function (bHasLastModified) {
-		var sTitle = bHasLastModified
-			? "read: success with Last-Modified"
-			: "read: success with Date only, no Last-Modified";
+	QUnit.test("read: success with Date, ETag and Last-Modified", function (assert) {
+		var sDate = "Tue, 18 Apr 2017 14:40:29 GMT",
+			sETag = 'W/"19700101000000.0000000"',
+			sLastModified = "Fri, 07 Apr 2017 11:21:50 GMT",
+			oExpectedJson = {
+				"$Version" : "4.0",
+				"$EntityContainer" : "<5.1.1 Schema Namespace>.<13.1.1 EntityContainer Name>"
+			},
+			oExpectedResult = {
+				"$Version" : "4.0",
+				"$EntityContainer" : "<5.1.1 Schema Namespace>.<13.1.1 EntityContainer Name>",
+				"$Date" : sDate,
+				"$ETag" : sETag,
+				"$LastModified" : sLastModified
+			},
+			oExpectedXml = {},
+			mHeaders = {},
+			oMetadataRequestor = _MetadataRequestor.create(mHeaders, "4.0"),
+			sUrl = "/~/";
 
-		QUnit.test(sTitle, function (assert) {
-			var sDate = "Tue, 18 Apr 2017 14:40:29 GMT",
-				oExpectedJson = {
+		this.mock(jQuery).expects("ajax")
+			.withExactArgs(sUrl, {
+				headers : sinon.match.same(mHeaders),
+				method : "GET"
+			}).returns(createMock(oExpectedXml, false, sDate, sLastModified, sETag));
+		this.mock(_V4MetadataConverter.prototype).expects("convertXMLMetadata")
+			.withExactArgs(sinon.match.same(oExpectedXml), sUrl)
+			.returns(oExpectedJson);
+
+		// code under test
+		return oMetadataRequestor.read(sUrl).then(function (oResult) {
+			assert.deepEqual(oResult, oExpectedResult);
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("read: bPrefetch", function (assert) {
+		var oConverterMock = this.mock(_MetadataConverter.prototype),
+			sDate = "Tue, 18 Apr 2017 14:40:29 GMT",
+			sETag = 'W/"19700101000000.0000000"',
+			oJQueryMock = this.mock(jQuery),
+			sLastModified = "Fri, 07 Apr 2017 11:21:50 GMT",
+			oExpectedXml = {},
+			mHeaders = {},
+			oMetadataRequestor = _MetadataRequestor.create(mHeaders, "4.0"),
+			sUrl = "/~/";
+
+		oJQueryMock.expects("ajax")
+			.withExactArgs(sUrl, {
+				headers : sinon.match.same(mHeaders),
+				method : "GET"
+			}).returns(createMock(oExpectedXml, false, sDate, sLastModified, sETag));
+		oConverterMock.expects("convertXMLMetadata").never();
+
+		// code under test
+		return oMetadataRequestor.read(sUrl, false, true).then(function (oResult) {
+			var oExpectedJson = {
 					"$Version" : "4.0",
 					"$EntityContainer" : "<5.1.1 Schema Namespace>.<13.1.1 EntityContainer Name>"
-				},
-				oExpectedXml = "xml",
-				oJQueryMock = this.mock(jQuery),
-				mHeaders = {},
-				sLastModified = bHasLastModified ? "Fri, 07 Apr 2017 11:21:50 GMT" : null,
-				oMetadataRequestor = _MetadataRequestor.create(mHeaders, "4.0"),
-				sUrl = "/~/";
+				};
 
-			oJQueryMock.expects("ajax")
-				.withExactArgs(sUrl, {
-					headers : sinon.match.same(mHeaders),
-					method : "GET"
-				}).returns(createMock(oExpectedXml, false, sDate, sLastModified));
-			this.mock(_V4MetadataConverter).expects("convertXMLMetadata")
+			// "...have at least the same properties as..."
+			sinon.assert.match(oResult, sinon.match({
+				"$Date" : sDate,
+				"$ETag" : sETag,
+				"$LastModified" : sLastModified,
+				"$XML" : sinon.match.same(oExpectedXml)
+			}));
+
+			assert.throws(function () {
+				oMetadataRequestor.read(sUrl, false, true);
+			}, new Error("Must not prefetch twice: " + sUrl));
+
+			// Note: no addt'l request
+			oConverterMock.expects("convertXMLMetadata")
 				.withExactArgs(sinon.match.same(oExpectedXml), sUrl)
 				.returns(oExpectedJson);
 
 			// code under test
-			return oMetadataRequestor.read(sUrl).then(function (oResult) {
+			return oMetadataRequestor.read(sUrl, false, false).then(function (oResult) {
+				var oNewExpectedJson = {
+						"$Version" : "4.0",
+						"$EntityContainer" : "NEW!"
+					},
+					oNewExpectedXml = {};
+
 				assert.deepEqual(oResult, {
-					"$Version" : "4.0",
+					"$Date" : sDate,
 					"$EntityContainer" : "<5.1.1 Schema Namespace>.<13.1.1 EntityContainer Name>",
-					"$LastModified" : bHasLastModified ? sLastModified : sDate
+					"$ETag" : sETag,
+					"$LastModified" : sLastModified,
+					"$Version" : "4.0"
+				});
+
+				oJQueryMock.expects("ajax")
+					.withExactArgs(sUrl, {
+						headers : sinon.match.same(mHeaders),
+						method : "GET"
+					}).returns(createMock(oNewExpectedXml));
+				oConverterMock.expects("convertXMLMetadata")
+					.withExactArgs(sinon.match.same(oNewExpectedXml), sUrl)
+					.returns(oNewExpectedJson);
+
+				// code under test
+				return oMetadataRequestor.read(sUrl).then(function (oNewResult) {
+					assert.deepEqual(oNewResult, oNewExpectedJson);
 				});
 			});
 		});

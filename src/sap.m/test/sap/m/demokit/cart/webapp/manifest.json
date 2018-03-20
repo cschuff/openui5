@@ -1,7 +1,6 @@
 {
-	"_version": "1.3.0",
+	"_version": "1.8.0",
 	"sap.app": {
-		"_version": "1.3.0",
 		"id": "sap.ui.demo.cart",
 		"type": "application",
 		"i18n": "i18n/i18n.properties",
@@ -22,7 +21,6 @@
 		}
 	},
 	"sap.ui": {
-		"_version": "1.3.0",
 		"technology": "UI5",
 		"icons": {
 			"icon": "sap-icon://detail-view",
@@ -36,30 +34,23 @@
 			"desktop": true,
 			"tablet": true,
 			"phone": true
-		},
-		"supportedThemes": [
-			"sap_hcb",
-			"sap_belize"
-		]
+		}
 	},
 	"sap.ui5": {
-		"_version": "1.2.0",
 		"rootView": {
 			"viewName": "sap.ui.demo.cart.view.App",
 			"type": "XML",
+			"async": true,
 			"id": "app"
 		},
 		"dependencies": {
 			"minUI5Version": "1.36.0",
 			"libs": {
 				"sap.ui.core": {
-					"minVersion": "1.36.0"
 				},
 				"sap.m": {
-					"minVersion": "1.36.0"
 				},
 				"sap.ui.layout": {
-					"minVersion": "1.36.0"
 				}
 			}
 		},
@@ -79,6 +70,7 @@
 				"preload": true
 			}
 		},
+		"handleValidation": true,
 		"resources": {
 			"css": [
 				{
@@ -91,7 +83,7 @@
 				"routerClass": "sap.m.routing.Router",
 				"viewType": "XML",
 				"viewPath": "sap.ui.demo.cart.view",
-				"controlId": "App",
+				"controlId": "app",
 				"controlAggregation": "pages",
 				"transition": "slide",
 				"bypassed": {
@@ -99,7 +91,8 @@
 						"home",
 						"notFound"
 					]
-				}
+				},
+				"async": true
 			},
 			"routes": [
 				{
@@ -140,7 +133,14 @@
 					"name": "cart",
 					"target": [
 						"cart"
-
+					]
+				},
+				{
+					"pattern": "cart/{productId}",
+					"name": "cartProductView",
+					"target": [
+						"cart",
+						"productView"
 					]
 				},
 				{
@@ -164,13 +164,15 @@
 			],
 			"targets": {
 				"splitscreenTarget": {
-					"viewName": "SplitScreen"
+					"viewName": "SplitScreen",
+					"viewId": "splitView"
 				},
 				"productView": {
 					"viewName": "Product",
 					"viewLevel": 3,
 					"parent": "splitscreenTarget",
 					"controlId": "splitContainer",
+					"viewId": "productView",
 					"controlAggregation": "detailPages",
 					"title":"{Name}"
 				},
@@ -180,6 +182,7 @@
 					"parent": "splitscreenTarget",
 					"controlId": "splitContainer",
 					"controlAggregation": "masterPages",
+					"viewId": "categoryView",
 					"title": {
 						"parts": [
 							"i18n>tabTitle",
@@ -193,6 +196,7 @@
 					"parent": "splitscreenTarget",
 					"controlId": "splitContainer",
 					"controlAggregation": "detailPages",
+					"viewId": "notFoundView",
 					"title": "{i18n>categoryNoData}"
 				},
 				"welcome": {
@@ -200,6 +204,7 @@
 					"viewLevel": 0,
 					"parent": "splitscreenTarget",
 					"controlId": "splitContainer",
+					"viewId": "welcomeView",
 					"controlAggregation": "detailPages"
 				},
 				"home": {
@@ -208,6 +213,7 @@
 					"parent": "splitscreenTarget",
 					"controlId": "splitContainer",
 					"controlAggregation": "masterPages",
+					"viewId": "homeView",
 					"title": "{i18n>homeTitle}"
 				},
 				"homeSlide": {
@@ -222,6 +228,7 @@
 					"parent": "splitscreenTarget",
 					"controlId": "splitContainer",
 					"controlAggregation": "masterPages",
+					"viewId": "cartView",
 					"title": {
 						"parts": [
 							"i18n>tabTitle",
@@ -232,12 +239,14 @@
 				"checkout": {
 					"viewName": "Checkout",
 					"viewLevel": 1,
-					"title": "{i18n>checkoutTitle}"
+					"title": "{i18n>checkoutTitle}",
+					"viewId": "checkoutView"
 				},
 				"ordercompleted": {
 					"viewName": "OrderCompleted",
 					"viewLevel": 2,
-					"title": "{i18n>ordercompletedTitle}"
+					"viewId": "orderCompletedView",
+					"title": "{i18n>orderCompletedTitle}"
 				}
 			}
 		}

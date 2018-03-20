@@ -2,8 +2,8 @@
  * ${copyright}
  */
 
-sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control'],
-	function(jQuery, library, Control) {
+sap.ui.define(['./library', 'sap/ui/core/Control', './TileContentRenderer'],
+	function(library, Control, TileContentRenderer) {
 	"use strict";
 
 	/**
@@ -17,7 +17,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control'],
 	 *
 	 * @author SAP SE
 	 * @version ${version}
-	 * @since 1.34
+	 * @since 1.34.0
 	 *
 	 * @public
 	 * @alias sap.m.TileContent
@@ -50,7 +50,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Control'],
 				 */
 				"disabled" : {type : "boolean", group : "Behavior", defaultValue : false},
 				/**
-				 * The frame type: 1x1 or 2x1.
+				 * Frame types: 1x1, 2x1, and auto.
 				 */
 				"frameType" : {type : "sap.m.FrameType", group : "Appearance", defaultValue : "Auto"}
 			},

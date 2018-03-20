@@ -9,12 +9,12 @@
 
 .sapMTabStrip {
 	position: relative;
+	height: 3rem;
 	background: @sapUiPageHeaderBackground;
 	box-shadow: @sapUiShadowHeader;
 	box-sizing: border-box;
 	.sapMTSLeftOverflowButtons {
 		position: absolute;
-		background: linear-gradient(90deg, @sapUiPageHeaderBackground 0%, @sapUiPageHeaderBackground 75%, fade(@sapUiPageHeaderBackground, 0) 100%);
 		margin-left: 0.25rem;
 		visibility: hidden;
 		width: 3rem;
@@ -30,7 +30,6 @@
 		left: 0;
 		right: 0;
 		bottom: -2px;
-		background: linear-gradient(90deg, @sapUiObjectHeaderBorderColor 0%, @sapUiObjectHeaderBorderColor 75%, fade(@sapUiObjectHeaderBorderColor, 0) 100%);
 	}
 	.sapMTSTabsContainer {
 		height: 100%;
@@ -99,7 +98,6 @@
 	}
 	.sapMTSRightOverflowButtons {
 		position: absolute;
-		background: linear-gradient(90deg, fade(@sapUiPageHeaderBackground, 0) 0%, @sapUiPageHeaderBackground 25%, @sapUiPageHeaderBackground 100%);
 		right: 5.5rem;
 		visibility: hidden;
 		width: 3rem;
@@ -118,7 +116,6 @@
 		left: 0;
 		right: 0;
 		bottom: -2px;
-		background: linear-gradient(90deg, fade(@sapUiObjectHeaderBorderColor, 0) 0%, @sapUiObjectHeaderBorderColor 25%, @sapUiObjectHeaderBorderColor 100%);
 	}
 	.sapMTSTouchArea {
 		height: 100%;
@@ -182,6 +179,43 @@ html[data-sap-ui-browser ^= "ie"], html[data-sap-ui-browser^="ed"] {
 	.sapMTabStrip .sapMTSTabsContainer .sapMTSTabs .sapMTabStripItem:focus::before {
 		border-style: dashed;
 	}
+}
+
+html[dir=ltr] .sapMTabStrip .sapMTSLeftOverflowButtons,
+html[dir=rtl] .sapMTabStrip .sapMTSRightOverflowButtons {
+	background: linear-gradient(90deg, @sapUiPageHeaderBackground 0%, @sapUiPageHeaderBackground 75%, fade(@sapUiPageHeaderBackground, 0) 100%);
+}
+
+html[dir=ltr] .sapMTabStrip .sapMTSLeftOverflowButtons::after,
+html[dir=rtl] .sapMTabStrip .sapMTSRightOverflowButtons::after {
+	background: linear-gradient(90deg, @sapUiObjectHeaderBorderColor 0%, @sapUiObjectHeaderBorderColor 75%, fade(@sapUiObjectHeaderBorderColor, 0) 100%);
+
+}
+
+html[dir=ltr] .sapMTabStrip .sapMTSRightOverflowButtons,
+html[dir=rtl] .sapMTabStrip .sapMTSLeftOverflowButtons {
+	background: linear-gradient(90deg, fade(@sapUiPageHeaderBackground, 0) 0%, @sapUiPageHeaderBackground 25%, @sapUiPageHeaderBackground 100%);
+}
+
+html[dir=ltr] .sapMTabStrip .sapMTSRightOverflowButtons::after,
+html[dir=rtl] .sapMTabStrip .sapMTSLeftOverflowButtons::after {
+	background: linear-gradient(90deg, fade(@sapUiObjectHeaderBorderColor, 0) 0%, @sapUiObjectHeaderBorderColor 25%, @sapUiObjectHeaderBorderColor 100%);
+}
+
+html .sapMTabStripSelectListItemCloseBtn .sapMBtnInner {
+	display: block;
+	height: 1.625rem;
+	min-width: 1.625rem;
+	width: 1.625rem;
+	padding: 0;
+	margin: 0 auto;
+}
+
+.sapMTabStripSelectListItemCloseBtn .sapMBtnIcon {
+	line-height: 1.45rem;
+	width: 100%;
+	height: 100%;
+	font-size: 1rem;
 }
 
 /* ============================================= */

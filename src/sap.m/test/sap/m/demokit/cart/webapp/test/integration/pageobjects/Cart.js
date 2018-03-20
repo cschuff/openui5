@@ -9,16 +9,17 @@ sap.ui.define([
 	'sap/ui/test/matchers/BindingPath',
 	'sap/ui/test/matchers/Ancestor',
 	'sap/ui/test/actions/Press'
-], function (Opa5,
-			 AggregationFilled,
-			 AggregationEmpty,
-			 Properties,
-			 PropertyStrictEquals,
-			 AggregationContainsPropertyEqual,
-			 AggregationLengthEquals,
-			 BindingPath,
-			 Ancestor,
-			 Press) {
+], function (
+	Opa5,
+	AggregationFilled,
+	AggregationEmpty,
+	Properties,
+	PropertyStrictEquals,
+	AggregationContainsPropertyEqual,
+	AggregationLengthEquals,
+	BindingPath,
+	Ancestor,
+	Press) {
 	"use strict";
 
 	Opa5.createPageObjects({
@@ -104,7 +105,6 @@ sap.ui.define([
 
                 iShouldSeeTheCart: function () {
                     return this.waitFor({
-                        viewName: "Cart",
                         success: function () {
                             Opa5.assert.ok(true, "The cart was successfully displayed");
                         },
@@ -269,17 +269,16 @@ sap.ui.define([
 					});
 				},
 
-	            iShouldSeeTheTotalPriceEqualToZero : function () {
-		            return this.waitFor({
-			            id: "totalPriceText",
-			            matchers: new PropertyStrictEquals({name: "text", value: "Total: 0,00 EUR"}),
-			            success: function () {
-				            Opa5.assert.ok(true, "Total price is updated correctly");
-			            },
-			            errorMessage: "Total price is not updated correctly (If you have trouble running this test," +
-			            " delete your browser cache. This test will fail, if the products in the cart do not exactly match this tests expectations.)"
-		            });
-	            },
+				iShouldSeeTheTotalPriceEqualToZero : function () {
+					return this.waitFor({
+						id: "totalPriceText",
+						matchers: new PropertyStrictEquals({name: "text", value: "Total: 0,00 EUR"}),
+						success: function () {
+							Opa5.assert.ok(true, "Total price is updated correctly");
+						},
+						errorMessage: "Total price is not updated correctly"
+					});
+				},
 
 				iShouldSeeTheTotalPriceUpdated: function () {
 					return this.waitFor({
@@ -288,8 +287,7 @@ sap.ui.define([
 						success: function () {
 							Opa5.assert.ok(true, "Total price is updated correctly");
 						},
-						errorMessage: "Total price is not updated correctly (If you have trouble running this test," +
-						" delete your browser cache. This test will fail, if the products in the cart do not exactly match this tests expectations.)"
+						errorMessage: "Total price is not updated correctly"
 					});
 				}
 			}

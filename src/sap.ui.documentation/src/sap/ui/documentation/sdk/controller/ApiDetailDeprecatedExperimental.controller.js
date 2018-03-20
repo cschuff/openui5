@@ -7,8 +7,9 @@ sap.ui.define([
 		"jquery.sap.global",
 		"sap/ui/documentation/sdk/controller/BaseController",
 		"sap/ui/model/json/JSONModel",
-		"sap/ui/documentation/sdk/controller/util/JSDocUtil"
-	], function (jQuery, BaseController, JSONModel, JSDocUtil) {
+		"sap/ui/documentation/sdk/controller/util/JSDocUtil",
+		"sap/ui/documentation/sdk/controller/util/APIInfo"
+	], function (jQuery, BaseController, JSONModel, JSDocUtil, APIInfo) {
 		"use strict";
 
 		return BaseController.extend("sap.ui.documentation.sdk.controller.ApiDetailDeprecatedExperimental", {
@@ -21,11 +22,8 @@ sap.ui.define([
 				this.setModel(new JSONModel(), "deprecatedAPIs");
 				this.setModel(new JSONModel(), "experimentalAPIs");
 
-				this.getRouter().getRoute("deprecated").attachPatternMatched(this._onTopicMatched, this);
-				this.getRouter().getRoute("experimental").attachPatternMatched(this._onTopicMatched, this);
-
-				// click handler for @link tags in JSdoc fragments
-				this.getView().attachBrowserEvent("click", this.onJSDocLinkClick, this);
+				this.getRouter().getRoute("deprecated").attachPatternMatched(this._onTopicDeprecatedMatched, this);
+				this.getRouter().getRoute("experimental").attachPatternMatched(this._onTopicExperimentalMatched, this);
 
 				this._currentMedia = this.getView()._getCurrentMediaContainerRange();
 
@@ -42,29 +40,37 @@ sap.ui.define([
 			},
 
 			onExit: function () {
-				this.getView().detachBrowserEvent("click", this.onJSDocLinkClick, this);
 				this.getView()._detachMediaContainerWidthChange(this._resizeMessageStrip, this);
 			},
 
-			_onTopicMatched: function (oEvent) {
-				var oComponent = this.getOwnerComponent();
-
+			_onTopicDeprecatedMatched: function (oEvent) {
 				if (this._hasMatched) {
 					return;
 				}
 
 				this._hasMatched = true;
 
-				oComponent.loadVersionInfo()
-					.then(oComponent.fetchAPIInfoAndBindModels.bind(oComponent))
-					.then(function () {
-						var aLibsData = oComponent.getModel("libsData").getData();
+				this.getView().byId("deprecatedList").attachUpdateFinished(this._modifyLinks, this);
 
-						this.getModel("deprecatedAPIs").setData(aLibsData.deprecated);
-						this.getModel("experimentalAPIs").setData(aLibsData.experimental);
+				APIInfo.getDeprecatedPromise().then(function (oData) {
+					this.getModel("deprecatedAPIs").setData(oData);
+					jQuery.sap.delayedCall(0, this, this._prettify);
+				}.bind(this));
+			},
 
-						setTimeout(this._prettify, 0);
-					}.bind(this));
+			_onTopicExperimentalMatched: function (oEvent) {
+				if (this._hasMatched) {
+					return;
+				}
+
+				this._hasMatched = true;
+
+				this.getView().byId("experimentalList").attachUpdateFinished(this._modifyLinks, this);
+
+				APIInfo.getExperimentalPromise().then(function (oData) {
+					this.getModel("experimentalAPIs").setData(oData);
+					jQuery.sap.delayedCall(0, this, this._prettify);
+				}.bind(this));
 			},
 
 			_prettify: function () {
@@ -76,11 +82,11 @@ sap.ui.define([
 
 			compareVersions: function (version1, version2) {
 				var sWithoutVersion = "WITHOUT VERSION";
-				if (version1 === sWithoutVersion) {
+				if (version1 === sWithoutVersion || !version1) {
 					return -1;
 				}
 
-				if (version2 === sWithoutVersion) {
+				if (version2 === sWithoutVersion || !version2) {
 					return 1;
 				}
 
@@ -105,11 +111,7 @@ sap.ui.define([
 			},
 
 			formatTitle: function (sTitle) {
-				if (sTitle === "Without Version") {
-					return sTitle;
-				} else {
-					return "As of " + sTitle;
-				}
+				return sTitle ? "As of " + sTitle : "Version N/A";
 			},
 
 			formatDescription: function (sText, sSince) {
@@ -133,24 +135,11 @@ sap.ui.define([
 					return sControlName + "#events:" + sEntityName;
 				}
 
-				return "";
-			},
-
-			onApiPress: function (oControlEvent) {
-				var oCustomData = oControlEvent.getSource().getCustomData(),
-					sClassName = oCustomData[0].getValue(),
-					sEntityId = oCustomData[1].getValue();
-
-				// oCustomData[3].getValue() is true if method is static, else it is false
-				if (oCustomData[3].getValue()) {
-					sEntityId = sClassName + "." + sEntityId;
+				if (sEntityType === "class") {
+					return sControlName;
 				}
 
-				this.getRouter().navTo("apiId", {
-					id: sClassName,
-					entityId: sEntityId,
-					entityType: oCustomData[2].getValue()
-				}, false);
+				return "";
 			},
 
 			/**
@@ -160,9 +149,7 @@ sap.ui.define([
 			 * @private
 			 */
 			formatLinks: function (sText) {
-				var aLibsData = this.getOwnerComponent().getModel('libsData').getData();
-
-				var sFormattedTextBlock = JSDocUtil.formatTextBlock(sText, {
+				return JSDocUtil.formatTextBlock(sText, {
 					linkFormatter: function (target, text) {
 
 						var iHashIndex;
@@ -177,15 +164,11 @@ sap.ui.define([
 
 						text = text || target; // keep the full target in the fallback text
 
-						if (iHashIndex < 0 && !aLibsData[target]) {
+						if (iHashIndex < 0) {
 							var iLastDotIndex = target.lastIndexOf("."),
 								sClassName = target.substring(0, iLastDotIndex),
 								sMethodName = target.substring(iLastDotIndex + 1),
-								targetMethod = aLibsData[sClassName].methods.filter(function(oMethod) {
-									if (oMethod.name === sMethodName) {
-										return oMethod;
-									}
-								})[0];
+								targetMethod = sMethodName;
 
 							if (targetMethod) {
 								if (targetMethod.static === true) {
@@ -205,41 +188,10 @@ sap.ui.define([
 							target = target.slice(0, iHashIndex) + '/methods/' + target.slice(iHashIndex + 1);
 						}
 
-						return "<a class=\"jsdoclink\" href=\"javascript:void(0);\" target=\"" + target + "\">" + text + "</a>";
+						return "<a class=\"jsdoclink\" href=\"#/api/" + target + "\" target=\"_self\">" + text + "</a>";
 
 					}
 				});
-
-				return sFormattedTextBlock;
-			},
-
-			onJSDocLinkClick: function (oEvent) {
-				// get target
-				var sRoute = "apiId",
-					bJSDocLink = oEvent.target.classList.contains("jsdoclink"),
-					oComponent = this.getOwnerComponent(),
-					sTarget = oEvent.target.getAttribute("target"),
-					aNavInfo;
-
-				if (!bJSDocLink || !sTarget) {
-					return;
-				}
-
-				if (sTarget.indexOf('/') >= 0) {
-					// link refers to a method or event target="<class name>/methods/<method name>" OR
-					// target="<class name>/events/<event name>
-					aNavInfo = sTarget.split('/');
-
-					oComponent.getRouter().navTo(sRoute, {
-						id: aNavInfo[0],
-						entityType: aNavInfo[1],
-						entityId: aNavInfo[2]
-					}, false);
-				} else {
-					oComponent.getRouter().navTo(sRoute, { id: sTarget }, false);
-				}
-
-				oEvent.preventDefault();
 			},
 
 			_resizeMessageStrip: function (oMedia) {
@@ -248,8 +200,8 @@ sap.ui.define([
 				oMedia = oMedia || oView._getCurrentMediaContainerRange();
 
 				var sName = oMedia.name,
-					oMessageStripContainer = this.getView().byId("deprecatedAPIStripContainer")
-						|| this.getView().byId("experimentalAPIStripContainer");
+					oMessageStripContainer = this.byId("deprecatedAPIStripContainer")
+						|| this.byId("experimentalAPIStripContainer");
 
 				if (!oMessageStripContainer) {
 					return;
@@ -259,6 +211,41 @@ sap.ui.define([
 					oMessageStripContainer.setWidth("calc(100% - 3rem)");
 				} else if (sName === "Tablet" || sName === "Phone") {
 					oMessageStripContainer.setWidth("calc(100% - 2rem)");
+				}
+			},
+
+			/**
+			 * Modify all deprecated and experimental links
+			 * @private
+			 */
+			_modifyLinks: function (oEvent) {
+				var aItems = oEvent.getSource().getItems(),
+					iLen = aItems.length,
+					oItem;
+
+				while (iLen--) {
+					oItem = aItems[iLen];
+					// Access control lazy loading method if available
+					if (oItem._getLinkSender) {
+						var oCustomData = oItem.getCustomData(),
+							sClassName = oCustomData[0].getValue(),
+							sEntityId = oCustomData[1].getValue(),
+							sEntityType = oCustomData[2].getValue(),
+							sHref;
+
+						// oCustomData[3].getValue() is true if method is static, else it is false
+						if (oCustomData[3].getValue()) {
+							sEntityId = sClassName + "." + sEntityId;
+						}
+
+						sHref = "#/api/" + sClassName;
+						if (sEntityType !== "class") {
+							sHref += "/" + sEntityType + "/" + sEntityId;
+						}
+
+						// Set link href to allow open in new window functionality
+						oItem._getLinkSender().setHref(sHref);
+					}
 				}
 			}
 		});

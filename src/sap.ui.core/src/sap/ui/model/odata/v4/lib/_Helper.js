@@ -4,13 +4,19 @@
 
 //Provides class sap.ui.model.odata.v4.lib._Helper
 sap.ui.define([
-	"jquery.sap.global"
-], function (jQuery) {
+	"jquery.sap.global",
+	"sap/ui/thirdparty/URI"
+], function (jQuery, URI) {
 	"use strict";
 
 	var rAmpersand = /&/g,
 		rEquals = /\=/g,
+		rEscapedCloseBracket = /%29/g,
+		rEscapedOpenBracket = /%28/g,
+		rEscapedTick = /%27/g,
 		rHash = /#/g,
+		// matches the rest of a segment after '(' and any segment that consists only of a number
+		rNotMetaContext = /\([^/]*|\/-?\d+/g,
 		rNumber = /^-?\d+$/,
 		rPlus = /\+/g,
 		rSingleQuote = /'/g,
@@ -118,7 +124,7 @@ sap.ui.define([
 		 *     concurrent modification detected via ETags (i.e. HTTP status code 412)
 		 *     <li><code>message</code>: Error message
 		 *     <li><code>status</code>: HTTP status code
-		 *     <li><code>statusText</code>: HTTP status text
+		 *     <li><code>statusText</code>: (optional) HTTP status text
 		 *   </ul>
 		 * @see <a href=
 		 * "http://docs.oasis-open.org/odata/odata-json-format/v4.0/os/odata-json-format-v4.0-os.html"
@@ -161,6 +167,66 @@ sap.ui.define([
 			}
 
 			return oResult;
+		},
+
+		/**
+		 * Returns a "get*" method corresponding to the given "fetch*" method.
+		 *
+		 * @param {string} sFetch
+		 *   A "fetch*" method's name
+		 * @param {boolean} [bThrow=false]
+		 *   Whether the "get*" method throws if the promise is not fulfilled
+		 * @returns {function}
+		 *   A "get*" method returning the "fetch*" method's result or
+		 *   <code>undefined</code> in case the promise is not (yet) fulfilled
+		 */
+		createGetMethod : function (sFetch, bThrow) {
+			return function () {
+				var oSyncPromise = this[sFetch].apply(this, arguments);
+
+				if (oSyncPromise.isFulfilled()) {
+					return oSyncPromise.getResult();
+				} else if (bThrow) {
+					if (oSyncPromise.isRejected()) {
+						oSyncPromise.caught();
+						throw oSyncPromise.getResult();
+					} else {
+						throw new Error("Result pending");
+					}
+				}
+			};
+		},
+
+		/**
+		 * Returns a "request*" method corresponding to the given "fetch*" method.
+		 *
+		 * @param {string} sFetch
+		 *   A "fetch*" method's name
+		 * @returns {function}
+		 *   A "request*" method returning the "fetch*" method's result wrapped via
+		 *   <code>Promise.resolve()</code>
+		 */
+		createRequestMethod : function (sFetch) {
+			return function () {
+				return Promise.resolve(this[sFetch].apply(this, arguments));
+			};
+		},
+
+		/**
+		 * Drills down into the given object according to <code>aPath</code>.
+		 *
+		 * @param {object} oData
+		 *   The object to start at
+		 * @param {string[]} aPath
+		 *   Relative path to drill-down into, as array of segments
+		 * @returns {*}
+		 *   The result matching to <code>aPath</code> or <code>undefined</code> if the path leads
+		 *   into void
+		 */
+		drillDown : function (oData, aPath) {
+			return aPath.reduce(function (oData, sSegment) {
+				return (oData && sSegment in oData) ? oData[sSegment] : undefined;
+			}, oData);
 		},
 
 		/**
@@ -294,6 +360,111 @@ sap.ui.define([
 		},
 
 		/**
+		 * Returns the key predicate (see "4.3.1 Canonical URL") for the given entity using the
+		 * given meta data.
+		 *
+		 * @param {object} oInstance
+		 *   Entity instance runtime data
+		 * @param {string} sMetaPath
+		 *   The meta path of the entity in the cache including the cache's resource path
+		 * @param {object} mTypeForMetaPath
+		 *   Maps meta paths to the corresponding entity or complex types
+		 * @returns {string}
+		 *   The key predicate, e.g. "(Sector='DevOps',ID='42')" or "('42')" or undefined if at
+		 *   least one key property is undefined
+		 *
+		 * @private
+		 */
+		getKeyPredicate : function (oInstance, sMetaPath, mTypeForMetaPath) {
+			var aKeyProperties = [],
+				mKey2Value = Helper.getKeyProperties(oInstance, sMetaPath, mTypeForMetaPath, true);
+
+			if (!mKey2Value) {
+				return undefined;
+			}
+			aKeyProperties = Object.keys(mKey2Value).map(function (sAlias, iIndex, aKeys) {
+				var vValue = encodeURIComponent(mKey2Value[sAlias]);
+
+				return aKeys.length === 1 ? vValue : encodeURIComponent(sAlias) + "=" + vValue;
+			});
+			return "(" + aKeyProperties.join(",") + ")";
+		},
+
+		/**
+		 * Returns the key properties mapped to values from the given entity using the given
+		 * meta data.
+		 *
+		 * @param {object} oInstance
+		 *   Entity instance runtime data
+		 * @param {string} sMetaPath
+		 *   The meta path of the entity in the cache including the cache's resource path
+		 * @param {object} mTypeForMetaPath
+		 *   Maps meta paths to the corresponding entity or complex types
+		 * @param {boolean} [bReturnAlias=false]
+		 *   Whether to return the aliases instead of the keys
+		 * @returns {object}
+		 *   The key properties map. For the meta data
+		 *   <Key>
+		 *    <PropertyRef Name="Info/ID" Alias="EntityInfoID"/>
+		 *   </Key>
+		 *   the following map is returned:
+		 *   - {EntityInfoID : 42}, if bReturnAlias = true;
+		 *   - {"Info/ID" : 42}, if bReturnAlias = false;
+		 *   - undefined, if at least one key property is undefined
+		 *
+		 * @private
+		 */
+		getKeyProperties : function (oInstance, sMetaPath, mTypeForMetaPath, bReturnAlias) {
+			var bFailed,
+				mKey2Value = {};
+
+			bFailed = mTypeForMetaPath[sMetaPath].$Key.some(function (vKey) {
+				var sKey, sKeyPath, aPath, sPropertyName, oType, vValue;
+
+				if (typeof vKey === "string") {
+					sKey = sKeyPath = vKey;
+				} else {
+					sKey = Object.keys(vKey)[0]; // alias
+					sKeyPath = vKey[sKey];
+					if (!bReturnAlias) {
+						sKey = sKeyPath;
+					}
+				}
+				aPath = sKeyPath.split("/");
+
+				vValue = Helper.drillDown(oInstance, aPath);
+				if (vValue === undefined) {
+					return true;
+				}
+
+				// the last path segment is the name of the simple property
+				sPropertyName = aPath.pop();
+				// find the type containing the simple property
+				oType = mTypeForMetaPath[Helper.buildPath(sMetaPath, aPath.join("/"))];
+				vValue = Helper.formatLiteral(vValue, oType[sPropertyName].$Type);
+				mKey2Value[sKey] = vValue;
+			});
+
+			return bFailed ? undefined : mKey2Value;
+		},
+
+		/**
+		 * Returns the OData metadata model path corresponding to the given OData data model path.
+		 *
+		 * @param {string} sPath
+		 *   An absolute data path within the OData data model, for example
+		 *   "/EMPLOYEES/0/ENTRYDATE" or "/EMPLOYEES('42')/ENTRYDATE
+		 * @returns {string}
+		 *   The corresponding metadata path within the OData metadata model, for example
+		 *   "/EMPLOYEES/ENTRYDATE"
+		 *
+		 * @private
+		 */
+		getMetaPath : function (sPath) {
+			return sPath.replace(rNotMetaContext, "");
+		},
+
+		/**
 		 * Returns the properties that have been selected for the given path.
 		 *
 		 * @param {object} mQueryOptions
@@ -337,6 +508,24 @@ sap.ui.define([
 		},
 
 		/**
+		 * Make the given URL absolute using the given base URL. The URLs must not contain a host
+		 * or protocol part. Ensures that key predicates are not %-encoded.
+		 *
+		 * @param {string} sUrl
+		 *   The URL
+		 * @param {string} sBase
+		 *   The base URL
+		 * @returns {string}
+		 *   The absolute URL
+		 */
+		makeAbsolute : function (sUrl, sBase) {
+			return new URI(sUrl).absoluteTo(sBase).toString()
+				.replace(rEscapedTick, "'")
+				.replace(rEscapedOpenBracket, "(")
+				.replace(rEscapedCloseBracket, ")");
+		},
+
+		/**
 		 * Determines the namespace of the given qualified name.
 		 *
 		 * @param {string} sName
@@ -355,6 +544,55 @@ sap.ui.define([
 			iIndex = sName.lastIndexOf(".");
 
 			return iIndex < 0 ? "" : sName.slice(0, iIndex);
+		},
+
+		/**
+		 * Parses a literal to the model value. The types "Edm.Binary" and "Edm.String" are
+		 * unsupported.
+		 *
+		 * @param {string} sLiteral The literal value
+		 * @param {string} sType The type
+		 * @param {string} sPath The path for this literal (for error messages)
+		 * @returns {*} The model value
+		 * @throws {Error} If the type is invalid or unsupported; the function only validates when a
+		 *   conversion is required
+		 */
+		parseLiteral : function (sLiteral, sType, sPath) {
+
+			function checkNaN(nValue) {
+				if (!isFinite(nValue)) { // this rejects NaN, Infinity, -Infinity
+					throw new Error(sPath + ": Not a valid " + sType + " literal: " + sLiteral);
+				}
+				return nValue;
+			}
+
+			if (sLiteral === "null") {
+				return null;
+			}
+
+			switch (sType) {
+			case "Edm.Boolean":
+				return sLiteral === "true";
+			case "Edm.Byte":
+			case "Edm.Int16":
+			case "Edm.Int32":
+			case "Edm.SByte":
+				return checkNaN(parseInt(sLiteral, 10));
+			case "Edm.Date":
+			case "Edm.DateTimeOffset":
+			case "Edm.Decimal":
+			case "Edm.Guid":
+			case "Edm.Int64":
+			case "Edm.TimeOfDay":
+				return sLiteral;
+			case "Edm.Double":
+			case "Edm.Single":
+				return sLiteral === "INF" || sLiteral === "-INF" || sLiteral === "NaN"
+					? sLiteral
+					: checkNaN(parseFloat(sLiteral));
+			default:
+				throw new Error(sPath + ": Unsupported type: " + sType);
+			}
 		},
 
 		/**

@@ -59,9 +59,21 @@ function(
 		var sLogoPath = this._oFioriHeader.getLogo();
 
 		if (this._oFioriHeader.getShowLogo() && sLogoPath) {
+			// Unstable: if FLP changes ID of <img/> element, logo could be not found
+			var $logo = this._oFioriHeader.$().find('#shell-header-icon');
+			var iWidth, iHeight;
+
+			if ($logo.length) {
+				iWidth = $logo.width();
+				iHeight = $logo.height();
+				this._checkLogoSize($logo, iWidth, iHeight);
+			}
+
 			aControls.unshift(
 				new Image({
-					src: sLogoPath
+					src: sLogoPath,
+					width: iWidth ? iWidth + 'px' : iWidth,
+					height: iHeight ? iHeight + 'px' : iHeight
 				}).data('name', 'logo')
 			);
 		}
@@ -75,6 +87,29 @@ function(
 			.then(function () {
 				this._oFioriHeader.removeStyleClass(FIORI_HIDDEN_CLASS);
 			}.bind(this));
+	};
+
+	Fiori.prototype._checkLogoSize = function($logo, iWidth, iHeight) {
+		var iNaturalWidth = $logo.get(0).naturalWidth;
+		var iNaturalHeight = $logo.get(0).naturalHeight;
+
+		if (iWidth !== iNaturalWidth || iHeight !== iNaturalHeight) {
+			jQuery.sap.log.error([
+				"sap.ui.rta: please check Fiori Launchpad logo, expected size is",
+				iWidth + "x" + iHeight + ",",
+				"but actual is " + iNaturalWidth + "x" + iNaturalHeight
+			].join(' '));
+		}
+	};
+
+	Fiori.prototype.destroy = function () {
+		// In case of destroy() without normal hide() call.
+		this._oFioriHeader.removeStyleClass(FIORI_HIDDEN_CLASS);
+
+		delete this._oRenderer;
+		delete this._oFioriHeader;
+
+		Adaptation.prototype.destroy.apply(this, arguments);
 	};
 
 	return Fiori;

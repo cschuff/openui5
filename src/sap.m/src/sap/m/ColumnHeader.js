@@ -1,9 +1,7 @@
 /*
  * ! ${copyright}
  */
-sap.ui.define([
-	'jquery.sap.global', 'sap/ui/core/Control', 'sap/ui/base/ManagedObject', 'sap/ui/core/Icon', './Table'
-], function(jQuery, Control, ManagedObject, Icon, Table) {
+sap.ui.define(['sap/ui/core/Control', 'sap/ui/core/Icon', './ColumnHeaderRenderer'], function(Control, Icon, ColumnHeaderRenderer) {
 	"use strict";
 
 	/**
@@ -108,7 +106,8 @@ sap.ui.define([
 		var oSortIcon = this.getAggregation("_sortIcon");
 		if (!oSortIcon) {
 			this.setAggregation("_sortIcon", new Icon({
-				src: sIconUrl
+				src: sIconUrl,
+				visible: this.getSorted()
 			}));
 		} else {
 			oSortIcon.setSrc(sIconUrl);
@@ -118,7 +117,33 @@ sap.ui.define([
 	};
 
 	/**
-	 * Defines if the filtering is applied and sets the filter icon on the <code>ColumnHeader</code> control.
+	 * Defines if sorting is applied and sets the sort icon on the <code>ColumnHeader</code> control.
+	 */
+	ColumnHeader.prototype.setSorted = function(bSorted) {
+		this.setProperty("sorted", bSorted);
+		var oSortIcon = this.getAggregation("_sortIcon");
+
+		if (!bSorted && !oSortIcon) {
+			return this;
+		}
+
+		if (bSorted) {
+			if (!oSortIcon) {
+				this.setAggregation("_sortIcon", new Icon({
+					src: this.getSortOrder() === "Ascending" ? "sap-icon://sort-ascending" : "sap-icon://sort-descending"
+				}));
+			} else {
+				oSortIcon.setVisible(true);
+			}
+		} else {
+			oSortIcon.setVisible(false);
+		}
+
+		return this;
+	};
+
+	/**
+	 * Defines if filtering is applied and sets the filter icon on the <code>ColumnHeader</code> control.
 	 */
 	ColumnHeader.prototype.setFiltered = function(bFiltered) {
 		// the property should be made Public when the control is made public
@@ -168,12 +193,12 @@ sap.ui.define([
 	};
 
 	/**
-	 * Click event for opening the <code>ViewSettingsPopover<code> control.
-	 * @param {object} oEvent Triggers the opening of the <code>ViewSettingsPopover<code> control.
+	 * Click event for opening the <code>ViewSettingsPopover</code> control.
+	 * @param {object} oEvent Triggers the opening of the <code>ViewSettingsPopover</code> control.
 	 * @private
 	 */
 	ColumnHeader.prototype.onclick = function(oEvent) {
-		if (this.getTableAdapter().interactive) {
+		if (this._isInteractive()) {
 			this._openColumnActions();
 		}
 	};
@@ -250,7 +275,7 @@ sap.ui.define([
 		var oBundle = sap.ui.getCore().getLibraryResourceBundle("sap.m"),
 			sAnnouncement = this.getText() + " ";
 
-		if (this.getTableAdapter().interactive) {
+		if (this._isInteractive()) {
 			if (this.getSortOrder()) {
 				sAnnouncement += oBundle.getText("COLUMNHEADER_SORTED") + " ";
 				sAnnouncement += (this.getSortOrder() === "Ascending" ? oBundle.getText("COLUMNHEADER_SORTED_ASCENDING") : oBundle.getText("COLUMNHEADER_SORTED_DESCENDING")) + " ";
@@ -275,9 +300,13 @@ sap.ui.define([
 		};
 	};
 
+	ColumnHeader.prototype._isInteractive = function() {
+		return this.getTableAdapter().interactive && !!this.getViewSettingsPopover();
+	};
+
 	ColumnHeader.prototype.exit = function() {
 		this._oAdapter = null;
 	};
 
 	return ColumnHeader;
-}, /* bExport= */true);
+});

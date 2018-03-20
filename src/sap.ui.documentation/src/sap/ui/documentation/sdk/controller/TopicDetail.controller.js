@@ -4,12 +4,13 @@
 
 /*global location */
 sap.ui.define([
+		"jquery.sap.global",
 		"sap/ui/documentation/sdk/controller/BaseController",
 		"sap/ui/model/json/JSONModel",
 		"sap/ui/documentation/sdk/controller/util/XML2JSONUtils",
 		"sap/ui/Device",
 		"sap/ui/documentation/sdk/util/ToggleFullScreenHandler"
-	], function (BaseController, JSONModel, XML2JSONUtils, Device, ToggleFullScreenHandler) {
+	], function (jQuery, BaseController, JSONModel, XML2JSONUtils, Device, ToggleFullScreenHandler) {
 		"use strict";
 
 		return BaseController.extend("sap.ui.documentation.sdk.controller.TopicDetail", {
@@ -63,6 +64,9 @@ sap.ui.define([
 					jsonObj;
 
 				if (!htmlContent) {
+					jQuery.sap.delayedCall(0, this, function () {
+						this.getRouter().myNavToWithoutHash("sap.ui.documentation.sdk.view.NotFound", "XML", false);
+					});
 					return;
 				}
 
@@ -76,7 +80,7 @@ sap.ui.define([
 
 				setTimeout(window.prettyPrint, 0);
 
-				this.searchResultsButtonVisibilitySwitch(this.getView().byId("topicDetailBackToSearch"));
+				this.searchResultsButtonVisibilitySwitch(this.byId("topicDetailBackToSearch"));
 
 				if (this.extHookonTopicMatched) {
 					this.extHookonTopicMatched(topicId);
@@ -91,16 +95,6 @@ sap.ui.define([
 
 			_formatHTML: function(html) {
 				return '<div>' + html + '</div>';
-			},
-
-			_onOrientationChange: function(e) {
-				var page = this.getView().byId("topicDetailPage");
-
-				if (e.landscape) {
-					page.setShowHeader(false);
-				} else {
-					page.setShowHeader(true);
-				}
 			},
 
 			backToSearch: function (text) {

@@ -6,16 +6,22 @@ sap.ui.require([
 	"sap/ui/model/odata/v4/lib/_Batch",
 	"sap/ui/model/odata/v4/lib/_Helper",
 	"sap/ui/model/odata/v4/lib/_Requestor",
-	"sap/ui/model/odata/v4/lib/_SyncPromise",
 	"sap/ui/test/TestUtils"
-], function (jQuery, _Batch, _Helper, _Requestor, _SyncPromise, TestUtils) {
+], function (jQuery, _Batch, _Helper, _Requestor, TestUtils) {
 	/*global QUnit, sinon */
 	/*eslint max-nested-callbacks: 0, no-warning-comments: 0 */
 	"use strict";
 
-	var sServiceUrl = "/sap/opu/odata4/IWBEP/TEA/default/IWBEP/TEA_BUSI/0001/",
+	var oModelInterface = {
+			fnFetchMetadata : function () {
+				throw new Error("Do not call me!");
+			},
+			fnGetGroupProperty : defaultGetGroupProperty,
+			fnOnCreateGroup : function () {}
+		},
+		sServiceUrl = "/sap/opu/odata4/IWBEP/TEA/default/IWBEP/TEA_BUSI/0001/",
 		sSampleServiceUrl
-			= "/sap/opu/odata4/sap/zui5_testv4/default/sap/zui5_epm_sample/0001/";
+			= "/sap/opu/odata4/sap/zui5_testv4/default/sap/zui5_epm_sample/0002/";
 
 	/**
 	 * Creates a mock for jQuery's XHR wrapper.
@@ -26,25 +32,33 @@ sap.ui.require([
 	 *   the response payload
 	 * @param {string} sTextStatus
 	 *   the XHR's status as text
-	 * @param {string} [sToken=null]
-	 *   optional CSRF token returned by server
-	 * @param {string} [sContentType=null]
-	 *   optional Content-Type returned by server
+	 * @param {object} mResponseHeaders
+	 *   the header attributes of the response; supported header attributes are "Content-Type",
+	 *   "DataServiceVersion", "OData-Version" and "X-CSRF-Token" all with default value
+	 *   <code>null</code>; if no response headers are given at all the default value for
+	 *   "OData-Version" is "4.0";
 	 * @returns {object}
 	 *   a mock for jQuery's XHR wrapper
 	 */
-	function createMock(assert, oPayload, sTextStatus, sToken, sContentType) {
+	function createMock(assert, oPayload, sTextStatus, mResponseHeaders) {
 		var jqXHR = new jQuery.Deferred();
 
 		setTimeout(function () {
 			jqXHR.resolve(oPayload, sTextStatus, { // mock jqXHR for success handler
 				getResponseHeader : function (sName) {
+					mResponseHeaders = mResponseHeaders || {
+							"OData-Version" : "4.0"
+						};
 					// Note: getResponseHeader treats sName case insensitive!
 					switch (sName) {
-					case "X-CSRF-Token":
-						return sToken || null;
 					case "Content-Type":
-						return sContentType || null;
+						return mResponseHeaders["Content-Type"] || null;
+					case "DataServiceVersion":
+						return mResponseHeaders["DataServiceVersion"] || null;
+					case "OData-Version":
+						return mResponseHeaders["OData-Version"] || null;
+					case "X-CSRF-Token":
+						return mResponseHeaders["X-CSRF-Token"] || null;
 					default:
 						assert.ok(false, "unexpected getResponseHeader(" + sName + ")");
 					}
@@ -55,21 +69,32 @@ sap.ui.require([
 		return jqXHR;
 	}
 
+	/*
+	 * Simulation of {@link sap.ui.model.odata.v4.ODataModel#getGroupProperty}
+	 */
+	function defaultGetGroupProperty(sGroupId, sPropertyName) {
+		if (sPropertyName !== 'submit') {
+			throw new Error("Unsupported property name: " + sPropertyName);
+		}
+		if (sGroupId === "$direct") {
+			return "Direct";
+		}
+		if (sGroupId === "$auto") {
+			return "Auto";
+		}
+		return "API";
+	}
+
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.v4.lib._Requestor", {
 		beforeEach : function () {
-			this.oSandbox = sinon.sandbox.create();
-			this.oLogMock = this.oSandbox.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(jQuery.sap.log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 
 			// workaround: Chrome extension "UI5 Inspector" calls this method which loads the
 			// resource "sap-ui-version.json" and thus interferes with mocks for jQuery.ajax
-			this.oSandbox.stub(sap.ui, "getVersionInfo");
-		},
-
-		afterEach : function () {
-			this.oSandbox.verifyAndRestore();
+			this.mock(sap.ui).expects("getVersionInfo").atLeast(0);
 		}
 	});
 
@@ -80,10 +105,32 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("getServiceUrl", function (assert) {
-		var oRequestor = _Requestor.create(sServiceUrl, undefined, {"foo" : "must be ignored"});
+		var oRequestor = _Requestor.create(sServiceUrl, oModelInterface,
+				{"foo" : "must be ignored"});
 
 		// code under test
 		assert.strictEqual(oRequestor.getServiceUrl(), sServiceUrl);
+	});
+
+	//*********************************************************************************************
+	[{
+		groupId : "$direct", submitMode : "Direct"
+	}, {
+		groupId : "$auto", submitMode : "Auto"
+	}, {
+		groupId : "unknown", submitMode : "API"
+	}].forEach(function (oFixture) {
+		QUnit.test("getGroupSubmitMode, success" + oFixture.groupId, function (assert) {
+			var oRequestor = _Requestor.create(sServiceUrl, oModelInterface);
+
+			this.mock(oModelInterface).expects("fnGetGroupProperty")
+				.withExactArgs(oFixture.groupId, "submit")
+				.returns(oFixture.submitMode);
+
+			// code under test
+			assert.strictEqual(oRequestor.getGroupSubmitMode(oFixture.groupId),
+				oFixture.submitMode);
+		});
 	});
 
 	//*********************************************************************************************
@@ -120,9 +167,7 @@ sap.ui.require([
 
 		QUnit.test(sTest, function (assert) {
 			var sBuildQueryResult = "foo",
-				fnFetchEntityContainer = function () {},
 				mHeaders = {},
-				fnOnCreateGroup = function () {},
 				mQueryParams = {},
 				oRequestor;
 
@@ -131,16 +176,14 @@ sap.ui.require([
 				.returns(sBuildQueryResult);
 
 			// code under test
-			oRequestor = _Requestor.create(sServiceUrl, mHeaders, mQueryParams,
-				fnFetchEntityContainer, fnOnCreateGroup, oFixture.sODataVersion);
+			oRequestor = _Requestor.create(sServiceUrl, oModelInterface, mHeaders, mQueryParams,
+				oFixture.sODataVersion);
 
 			assert.strictEqual(oRequestor.getServiceUrl(), sServiceUrl, "parameter sServiceUrl");
 			assert.strictEqual(oRequestor.mHeaders, mHeaders, "parameter mHeaders");
 			assert.strictEqual(oRequestor.sQueryParams, sBuildQueryResult,
 				"parameter mQueryParams");
-			assert.strictEqual(oRequestor.fnFetchEntityContainer, fnFetchEntityContainer);
-			assert.strictEqual(oRequestor.fnOnCreateGroup, fnOnCreateGroup,
-				"parameter fnOnCreateGroup");
+			assert.strictEqual(oRequestor.oModelInterface, oModelInterface);
 			// OData version specific header maps
 			assert.deepEqual(oRequestor.mFinalHeaders, oFixture.mFinalHeaders, "mFinalHeaders");
 			assert.deepEqual(oRequestor.mPredefinedPartHeaders, oFixture.mPredefinedPartHeaders,
@@ -182,100 +225,158 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	QUnit.test("request", function (assert) {
-		var oChangedPayload = {"foo" : 42},
-			oPayload = {},
-			oPromise,
-			fnOnCreateGroup = sinon.spy(),
-			oRequestor = _Requestor.create(sServiceUrl, undefined, {
-				"foo" : "URL params are ignored for normal requests"
-			}, fnOnCreateGroup),
-			oResult = {},
-			fnSubmit = sinon.spy();
-
-		this.mock(_Requestor).expects("cleanPayload")
-			.withExactArgs(sinon.match.same(oPayload)).returns(oChangedPayload);
-		this.mock(jQuery).expects("ajax")
-			.withExactArgs(sServiceUrl + "Employees?foo=bar", {
-				data : JSON.stringify(oChangedPayload),
-				headers : sinon.match({
-					"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true"
-				}),
-				method : "FOO"
-			}).returns(createMock(assert, oResult, "OK"));
-
-		// code under test
-		oPromise = oRequestor.request("FOO", "Employees?foo=bar", "$direct",
-			{"Content-Type" : "wrong"}, oPayload, fnSubmit);
-
-		return oPromise.then(function (result) {
-				assert.strictEqual(result, oResult);
-			});
-	});
-
-	//*********************************************************************************************
 	[{
-		sODataVersion : "2.0",
-		mExpectedRequestHeaders : {
-			"Accept" : "application/json",
-			"Content-Type" : "application/json;charset=UTF-8",
-			"DataServiceVersion" : "2.0",
-			"MaxDataServiceVersion" : "2.0",
-			"X-CSRF-Token" : "Fetch"
-		}
+		sRequired : null, bRequestSucceeds : true, sTitle : "success"
 	}, {
-		sODataVersion : "4.0",
-		mExpectedRequestHeaders : {
-			"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
-			"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true",
-			"OData-MaxVersion" : "4.0",
-			"OData-Version" : "4.0",
-			"X-CSRF-Token" : "Fetch"
-		}
-	}].forEach(function (oFixture) {
-		var sTitle = "request: OData version specific headers for $direct; sODataVersion = "
-				+ oFixture.sODataVersion;
+		// simulate a server which does not require a CSRF token, but fails with 403
+		sRequired : null, bRequestSucceeds : false, sTitle : "failure with 403"
+	}, {
+		// simulate a server which does not require a CSRF token, but fails otherwise
+		sRequired : "Required", bRequestSucceeds : false, iStatus : 500, sTitle : "failure with 500"
+	}, {
+		sRequired : "Required", sTitle : "CSRF token Required"
+	}, {
+		sRequired : "required", sTitle : "CSRF token required"
+	}, {
+		sRequired : "Required", bReadFails : true, sTitle : "fetch CSRF token fails"
+	}, {
+		sRequired : "Required", bDoNotDeliverToken : true, sTitle : "no CSRF token can be fetched"
+	}].forEach(function (o) {
+		QUnit.test("sendRequest: " + o.sTitle, function (assert) {
+			var oError = {},
+				oExpectation,
+				oReadFailure = {},
+				oRequestor = _Requestor.create("/Service/", oModelInterface,
+					{"X-CSRF-Token" : "Fetch"}),
+				oResponsePayload = {},
+				bSuccess = o.bRequestSucceeds !== false && !o.bReadFails && !o.bDoNotDeliverToken,
+				oTokenRequiredResponse = {
+					getResponseHeader : function (sName) {
+						// Note: getResponseHeader treats sName case insensitive!
+						assert.strictEqual(sName, "X-CSRF-Token");
+						return o.sRequired;
+					},
+					"status" : o.iStatus || 403
+				};
 
-		QUnit.test(sTitle, function (assert) {
-			var oConvertedResponse = {},
-				oRequestor = _Requestor.create(sServiceUrl, undefined, undefined, undefined,
-					undefined, oFixture.sODataVersion),
-				oResponsePayload = {};
+			this.mock(_Helper).expects("createError")
+				.exactly(bSuccess || o.bReadFails ? 0 : 1)
+				.withExactArgs(sinon.match.same(oTokenRequiredResponse))
+				.returns(oError);
 
-			this.mock(jQuery).expects("ajax")
-				.withExactArgs(sServiceUrl + "Employees", {
-					data : undefined,
-					headers : sinon.match(oFixture.mExpectedRequestHeaders),
-					method : "GET"
-				}).returns(createMock(assert, oResponsePayload, "OK"));
-			this.mock(oRequestor).expects("doFetchV4Response")
-				.withExactArgs(oResponsePayload)
-				.returns(_SyncPromise.resolve(oConvertedResponse));
+			// With <code>bRequestSucceeds === false</code>, "request" always fails,
+			// with <code>bRequestSucceeds === true</code>, "request" always succeeds,
+			// else "request" first fails due to missing CSRF token which can be fetched via
+			// "ODataModel#refreshSecurityToken".
+			this.mock(jQuery).expects("ajax").atLeast(1)
+				.withExactArgs("/Service/foo", sinon.match({
+					data : "payload",
+					headers : {"foo" : "bar"},
+					method : "FOO"
+				}))
+				.callsFake(function (sUrl, oSettings) {
+					var jqXHR;
 
-			// code under test
-			return oRequestor.request("GET", "Employees", "$direct")
-				.then(function (result) {
-					assert.strictEqual(result, oConvertedResponse);
+					if (o.bRequestSucceeds === true
+						|| o.bRequestSucceeds === undefined
+						&& oSettings.headers["X-CSRF-Token"] === "abc123") {
+						jqXHR = createMock(assert, oResponsePayload, "OK", {
+							"Content-Type" : "application/json",
+							"OData-Version" : "4.0"
+						});
+					} else {
+						jqXHR = new jQuery.Deferred();
+						setTimeout(function () {
+							jqXHR.reject(oTokenRequiredResponse);
+						}, 0);
+					}
+
+					return jqXHR;
+				});
+
+			oExpectation = this.mock(oRequestor).expects("refreshSecurityToken")
+				.withExactArgs("Fetch");
+			if (o.bRequestSucceeds !== undefined) {
+				oExpectation.never();
+			} else {
+				oExpectation.callsFake(function (sOldSecurityToken) {
+					return new Promise(function (fnResolve, fnReject) {
+						setTimeout(function () {
+							if (o.bReadFails) { // reading of CSRF token fails
+								fnReject(oReadFailure);
+							} else {
+								// HEAD might succeed, but not deliver a valid CSRF token
+								oRequestor.mHeaders["X-CSRF-Token"]
+									= o.bDoNotDeliverToken ? undefined : "abc123";
+								fnResolve();
+							}
+						}, 0);
+					});
+				});
+			}
+
+			return oRequestor.sendRequest("FOO", "foo", {"foo" : "bar"}, "payload")
+				.then(function (oPayload) {
+					assert.ok(bSuccess, "success possible");
+					assert.strictEqual(oPayload.contentType, "application/json");
+					assert.strictEqual(oPayload.body, oResponsePayload);
+				}, function (oError0) {
+					assert.ok(!bSuccess, "certain failure");
+					assert.strictEqual(oError0, o.bReadFails ? oReadFailure : oError);
 				});
 		});
 	});
 
 	//*********************************************************************************************
-	QUnit.test("request: fail to convert payload, $direct", function (assert) {
+	["NOTGET", "GET"].forEach(function (sMethod, i) {
+		var sTitle = "sendRequest: wait for CSRF token if method is not GET, " + i;
+
+		QUnit.test(sTitle, function (assert) {
+			var oPromise,
+				oRequestor = _Requestor.create(sServiceUrl, oModelInterface),
+				oResult = {},
+				oSecurityTokenPromise = new Promise(function (fnResolve, fnReject) {
+					setTimeout(function () {
+						oRequestor.mHeaders["X-CSRF-Token"] = "abc123";
+						fnResolve();
+					}, 0);
+				});
+
+			// security token already requested by #refreshSecurityToken
+			oRequestor.oSecurityTokenPromise = oSecurityTokenPromise;
+
+			this.mock(jQuery).expects("ajax")
+				.withExactArgs(sServiceUrl + "Employees?foo=bar", {
+					data : "payload",
+					headers : sinon.match({
+						"X-CSRF-Token" : sMethod === "GET" ? "Fetch" : "abc123"
+					}),
+					method : sMethod
+				}).returns(createMock(assert, oResult, "OK"));
+
+			// code under test
+			oPromise = oRequestor.sendRequest(sMethod, "Employees?foo=bar", {}, "payload");
+
+			return Promise.all([oPromise, oSecurityTokenPromise]);
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("sendRequest: fail, unsupported OData service version", function (assert) {
 		var oError = {},
-			oRequestor = _Requestor.create(sServiceUrl, undefined, undefined, undefined,
-				undefined, "2.0"),
-			oResponsePayload = {};
+			oRequestor = _Requestor.create("/", oModelInterface),
+			oRequestorMock = this.mock(oRequestor);
 
 		this.mock(jQuery).expects("ajax")
-			.withArgs(sServiceUrl + "Employees")
-			.returns(createMock(assert, oResponsePayload, "OK"));
-		this.mock(oRequestor).expects("doFetchV4Response")
-			.withExactArgs(oResponsePayload)
-			.returns(_SyncPromise.resolve(Promise.reject(oError)));
+			.withArgs("/Employees")
+			.returns(createMock(assert, {}, "OK"));
+		oRequestorMock.expects("doCheckVersionHeader")
+			.withExactArgs(sinon.match.func, "Employees")
+			.throws(oError);
+		oRequestorMock.expects("doConvertResponse").never();
 
 		// code under test
-		return oRequestor.request("GET", "Employees", "$direct")
+		return oRequestor.sendRequest("GET", "Employees")
 			.then(function (result) {
 				assert.notOk("Unexpected success");
 			}, function (oError0) {
@@ -284,127 +385,147 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	[{
-		sODataVersion : "2.0",
-		aExpectedRequestHeaders : ["DataServiceVersion", "MaxDataServiceVersion"]
-	}, {
-		sODataVersion : "4.0",
-		aExpectedRequestHeaders : ["OData-MaxVersion", "OData-Version"]
-	}].forEach(function (oFixture) {
-		var sTitle = "request: OData version specific headers for $batch; sODataVersion="
-				+ oFixture.sODataVersion;
+	QUnit.test("sendRequest(), store CSRF token from server", function (assert) {
+		var oRequestor = _Requestor.create("/", oModelInterface);
 
-		QUnit.test(sTitle, function (assert) {
-			var oRequestor = _Requestor.create(sServiceUrl, undefined, undefined, undefined,
-					undefined, oFixture.sODataVersion),
-				oAjaxResponse = {},
-				oDeserializeBatchResponse = {};
+		this.mock(jQuery).expects("ajax")
+			.withExactArgs("/", sinon.match({headers : {"X-CSRF-Token" : "Fetch"}}))
+			.returns(createMock(assert, {/*oPayload*/}, "OK", {
+				"OData-Version" : "4.0",
+				"X-CSRF-Token" : "abc123"
+			}));
 
-			this.mock(jQuery).expects("ajax")
-				.withExactArgs(sServiceUrl + "$batch", {
-					data : sinon.match.string,
-					headers : sinon.match(function (mAjaxHeaders) {
-						oFixture.aExpectedRequestHeaders.forEach(function (sHeaderKey) {
-							assert.strictEqual(mAjaxHeaders[sHeaderKey], oFixture.sODataVersion,
-								"expected header: " + sHeaderKey);
-						});
-						return true;
-					}),
-					method : "POST"
-				}).returns(createMock(assert, oAjaxResponse, "OK", undefined, "application/json"));
-			this.mock(_Batch).expects("deserializeBatchResponse")
-				.withExactArgs("application/json", oAjaxResponse)
-				.returns(oDeserializeBatchResponse);
-			this.mock(oRequestor).expects("doFetchV4Response").never();
+		return oRequestor.sendRequest("GET", "").then(function () {
+			assert.strictEqual(oRequestor.mHeaders["X-CSRF-Token"], "abc123");
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("sendRequest(), keep old CSRF token in case none is sent", function (assert) {
+		var oRequestor = _Requestor.create("/", oModelInterface, {"X-CSRF-Token" : "abc123"});
+
+		this.mock(jQuery).expects("ajax")
+			.withExactArgs("/", sinon.match({headers : {"X-CSRF-Token" : "abc123"}}))
+			.returns(createMock(assert, {/*oPayload*/}, "OK"));
+
+		return oRequestor.sendRequest("GET", "").then(function () {
+			assert.strictEqual(oRequestor.mHeaders["X-CSRF-Token"], "abc123");
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("sendRequest(), keep fetching CSRF token in case none is sent", function (assert) {
+		var oMock = this.mock(jQuery),
+			oRequestor = _Requestor.create("/", oModelInterface);
+
+		oMock.expects("ajax")
+			.withExactArgs("/", sinon.match({headers : {"X-CSRF-Token" : "Fetch"}}))
+			.returns(createMock(assert, {/*oPayload*/}, "OK"));
+
+		return oRequestor.sendRequest("GET", "").then(function () {
+			oMock.expects("ajax")
+				.withExactArgs("/", sinon.match({headers : {"X-CSRF-Token" : "Fetch"}}))
+				.returns(createMock(assert, {/*oPayload*/}, "OK"));
+
+			return oRequestor.sendRequest("GET", "");
+		});
+	});
+
+	//*********************************************************************************************
+	// Integrative test simulating parallel POST requests: Both got a 403 token "required",
+	// but the second not until the first already has completed fetching a new token,
+	// here the second can simply reuse the already fetched token
+	QUnit.test("sendRequest(): parallel POST requests, fetch HEAD only once", function (assert) {
+		var bFirstRequest = true,
+			jqFirstTokenXHR = createMock(assert, {}, "OK", {
+				"OData-Version" : "4.0",
+				"X-CSRF-Token" : "abc123"
+			}),
+			iHeadRequestCount = 0,
+			oRequestor = _Requestor.create("/Service/", oModelInterface);
+
+		this.mock(jQuery).expects("ajax").atLeast(1).callsFake(function (sUrl0, oSettings) {
+			var jqXHR,
+				oTokenRequiredResponse = {
+					getResponseHeader : function (sName) {
+						return "required";
+					},
+					"status" : 403
+				};
+
+			if (oSettings.method === "HEAD") {
+				jqXHR = jqFirstTokenXHR;
+				iHeadRequestCount += 1;
+			} else if (oSettings.headers["X-CSRF-Token"] === "abc123") {
+				jqXHR = createMock(assert, {}, "OK");
+			} else {
+				jqXHR = new jQuery.Deferred();
+				if (bFirstRequest) {
+					jqXHR.reject(oTokenRequiredResponse);
+					bFirstRequest = false;
+				} else {
+					// Ensure that the second POST request is rejected after the first one already
+					// has requested and received a token
+					jqFirstTokenXHR.then(setTimeout(function () {
+						// setTimeout needed here because .then comes first
+						jqXHR.reject(oTokenRequiredResponse);
+					}, 0));
+				}
+			}
+			return jqXHR;
+		});
+
+		// code under test
+		return Promise.all([
+			oRequestor.sendRequest("POST"),
+			oRequestor.sendRequest("POST")
+		]).then(function () {
+			assert.strictEqual(iHeadRequestCount, 1, "fetch HEAD only once");
+		});
+	});
+
+	//*********************************************************************************************
+	[undefined, "$direct"].forEach(function (sGroupId) {
+		QUnit.test("request: sGroupId=" + sGroupId, function (assert) {
+			var fnCancel = this.spy(),
+				oChangedPayload = {"foo" : 42},
+				oConvertedResponse = {},
+				oPayload = {},
+				oPromise,
+				oRequestor = _Requestor.create(sServiceUrl, oModelInterface, undefined, {
+					"foo" : "URL params are ignored for normal requests"
+				}),
+				oResponse = {body : {}},
+				fnSubmit = this.spy();
+
+			this.mock(oRequestor).expects("convertResourcePath")
+				.withExactArgs("Employees?custom=value")
+				.returns("~Employees~?custom=value");
+			this.mock(_Requestor).expects("cleanPayload")
+				.withExactArgs(sinon.match.same(oPayload)).returns(oChangedPayload);
+			this.mock(oRequestor).expects("sendRequest")
+				.withExactArgs("METHOD", "~Employees~?custom=value", {
+						"header" : "value",
+						"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true"
+					}, JSON.stringify(oChangedPayload))
+				.resolves(oResponse);
+			this.mock(oRequestor).expects("doConvertResponse")
+				.withExactArgs(sinon.match.same(oResponse.body), "meta/path")
+				.returns(oConvertedResponse);
 
 			// code under test
-			return oRequestor
-				.request("POST", "$batch", undefined, {"Accept" : "multipart/mixed"}, [])
-				.then(function (result) {
-					assert.strictEqual(result, oDeserializeBatchResponse);
+			oPromise = oRequestor.request("METHOD", "Employees?custom=value", sGroupId, {
+				"header" : "value",
+				"Content-Type" : "wrong"
+			}, oPayload, fnSubmit, fnCancel, "meta/path");
+
+			return oPromise.then(function (oResult) {
+				assert.strictEqual(oResult, oConvertedResponse);
+
+				sinon.assert.calledOnce(fnSubmit);
+				sinon.assert.notCalled(fnCancel);
 			});
 		});
-	});
-
-	//*********************************************************************************************
-	[{
-		sODataVersion : "2.0",
-		mExpectedRequestHeaders : {
-			"Accept" : "application/json",
-			"Content-Type" : "application/json;charset=UTF-8"
-		},
-		mProductsResponse : {d : {results : [{foo : "bar"}]}}
-	}, {
-		sODataVersion : "4.0",
-		mExpectedRequestHeaders : {
-			"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
-			"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true"
-		},
-		mProductsResponse : {value : [{foo : "bar"}]}
-	}].forEach(function (oFixture) {
-		var sTitle = "submitBatch(...): OData version specific headers; sODataVersion="
-				+ oFixture.sODataVersion;
-
-		QUnit.test(sTitle, function (assert) {
-			var oConvertedPayload = {},
-				aExpectedRequests = [{
-					method : "GET",
-					url : "Products",
-					headers : oFixture.mExpectedRequestHeaders,
-					body : undefined,
-					$cancel : undefined,
-					$promise : sinon.match.defined,
-					$reject : sinon.match.func,
-					$resolve : sinon.match.func,
-					$submit : undefined
-				}],
-				oGetProductsPromise,
-				oRequestor = _Requestor.create("/Service/", undefined, undefined, undefined,
-					undefined, oFixture.sODataVersion),
-				oRequestorMock = this.mock(oRequestor);
-
-			oRequestorMock.expects("doFetchV4Response")
-				.withExactArgs(oFixture.mProductsResponse) // not same; it is stringified and parsed
-				.returns(_SyncPromise.resolve(Promise.resolve(oConvertedPayload)));
-			oGetProductsPromise = oRequestor.request("GET", "Products", "group1")
-				.then(function (oResponse) {
-					assert.strictEqual(oResponse, oConvertedPayload);
-				});
-
-			oRequestorMock.expects("request")
-				.withExactArgs("POST", "$batch", undefined, {"Accept" : "multipart/mixed"},
-					aExpectedRequests)
-				.returns(Promise.resolve([
-					{responseText : JSON.stringify(oFixture.mProductsResponse)}
-				]));
-
-			return Promise.all([oGetProductsPromise, oRequestor.submitBatch("group1")]);
-		});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("submitBatch: fail to convert payload", function (assert) {
-		var oError = {},
-			oGetProductsPromise,
-			oRequestor = _Requestor.create("/Service/", undefined, undefined, undefined,
-					undefined, "2.0"),
-			oRequestorMock = this.mock(oRequestor),
-			oResponse = {d : {foo : "bar"}};
-
-		oRequestorMock.expects("doFetchV4Response")
-			.withExactArgs(oResponse)
-			.returns(_SyncPromise.resolve(Promise.reject(oError)));
-		oGetProductsPromise = oRequestor.request("GET", "Products", "group1")
-			.then(function () {
-				assert.notOk("Unexpected success");
-			}, function (oError0) {
-				assert.strictEqual(oError0, oError);
-			});
-		oRequestorMock.expects("request")
-			.withArgs("POST", "$batch")
-			.returns(Promise.resolve([{ responseText : JSON.stringify(oResponse)}]));
-
-		return Promise.all([oGetProductsPromise, oRequestor.submitBatch("group1")]);
 	});
 
 	//*********************************************************************************************
@@ -437,7 +558,7 @@ sap.ui.require([
 			var mDefaultHeaders = clone(mHeaders.defaultHeaders),
 				oPromise,
 				mRequestHeaders = clone(mHeaders.requestHeaders),
-				oRequestor = _Requestor.create(sServiceUrl, mDefaultHeaders),
+				oRequestor = _Requestor.create(sServiceUrl, oModelInterface, mDefaultHeaders),
 				oResult = {},
 				// add predefined request headers for OData V4
 				mResultHeaders = jQuery.extend({}, {
@@ -468,696 +589,117 @@ sap.ui.require([
 				"caller's map is unchanged");
 			assert.ok(oPromise instanceof Promise);
 			return oPromise.then(function (result) {
-					assert.strictEqual(result, oResult);
-				});
+				assert.strictEqual(result, oResult);
+			});
 		});
 	});
 
 	//*********************************************************************************************
 	QUnit.test("request(), fnOnCreateGroup", function (assert) {
-		var fnOnCreateGroup = sinon.spy(),
-			oRequestor = _Requestor.create("/", {}, {}, undefined, fnOnCreateGroup);
+		var oRequestor = _Requestor.create("/", oModelInterface);
 
+		this.mock(oModelInterface).expects("fnOnCreateGroup").withExactArgs("groupId");
+
+		// code under test
 		oRequestor.request("GET", "SalesOrders", "groupId");
 		oRequestor.request("GET", "SalesOrders", "groupId");
-
-		sinon.assert.calledOnce(fnOnCreateGroup);
-		sinon.assert.calledWithExactly(fnOnCreateGroup, "groupId");
 	});
 
 	//*********************************************************************************************
-	QUnit.test("request(), store CSRF token from server", function (assert) {
-		var oRequestor = _Requestor.create("/");
+	QUnit.test("request(), fnGetGroupProperty", function (assert) {
+		var oModelInterface = {
+				fnGetGroupProperty : defaultGetGroupProperty,
+				fnOnCreateGroup : null // optional
+			},
+			oRequestor = _Requestor.create("/", oModelInterface);
 
-		this.mock(jQuery).expects("ajax")
-			.withExactArgs("/", sinon.match({headers : {"X-CSRF-Token" : "Fetch"}}))
-			.returns(createMock(assert, {/*oPayload*/}, "OK", "abc123"));
+		this.mock(oModelInterface).expects("fnGetGroupProperty")
+			.withExactArgs("groupId", "submit")
+			.returns("API");
 
-		return oRequestor.request("GET", "").then(function () {
-			assert.strictEqual(oRequestor.mHeaders["X-CSRF-Token"], "abc123");
-		});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("request(), keep old CSRF token in case no one is sent", function (assert) {
-		var oRequestor = _Requestor.create("/", {"X-CSRF-Token" : "abc123"});
-
-		this.mock(jQuery).expects("ajax")
-			.withExactArgs("/", sinon.match({headers : {"X-CSRF-Token" : "abc123"}}))
-			.returns(createMock(assert, {/*oPayload*/}, "OK", /*sToken*/null));
-
-		return oRequestor.request("GET", "").then(function () {
-			assert.strictEqual(oRequestor.mHeaders["X-CSRF-Token"], "abc123");
-		});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("request(), keep fetching CSRF token in case no one is sent", function (assert) {
-		var oMock = this.mock(jQuery),
-			oRequestor = _Requestor.create("/");
-
-		oMock.expects("ajax")
-			.withExactArgs("/", sinon.match({headers : {"X-CSRF-Token" : "Fetch"}}))
-			.returns(createMock(assert, {/*oPayload*/}, "OK", /*sToken*/null));
-
-		return oRequestor.request("GET", "").then(function () {
-			oMock.expects("ajax")
-				.withExactArgs("/", sinon.match({headers : {"X-CSRF-Token" : "Fetch"}}))
-				.returns(createMock(assert, {/*oPayload*/}, "OK", /*sToken*/null));
-
-			return oRequestor.request("GET", "");
-		});
-	});
-
-	//*********************************************************************************************
-	[false, true].forEach(function (bSuccess) {
-		QUnit.test("refreshSecurityToken: success = " + bSuccess, function (assert) {
-			var oError = {},
-				oPromise,
-				oRequestor = _Requestor.create("/Service/", undefined, {"sap-client" : "123"}),
-				oTokenRequiredResponse = {};
-
-			this.mock(_Helper).expects("createError")
-				.exactly(bSuccess ? 0 : 2)
-				.withExactArgs(sinon.match.same(oTokenRequiredResponse))
-				.returns(oError);
-
-			this.stub(jQuery, "ajax", function (sUrl, oSettings) {
-				var jqXHR;
-
-				assert.strictEqual(sUrl, "/Service/?sap-client=123");
-				assert.strictEqual(oSettings.headers["X-CSRF-Token"], "Fetch");
-				assert.strictEqual(oSettings.method, "HEAD");
-
-				if (bSuccess) {
-					jqXHR = createMock(assert, undefined, "nocontent", "abc123");
-				} else {
-					jqXHR = new jQuery.Deferred();
-					setTimeout(function () {
-						jqXHR.reject(oTokenRequiredResponse);
-					}, 0);
-				}
-
-				return jqXHR;
-			});
-			assert.strictEqual("X-CSRF-Token" in oRequestor.mHeaders, false);
-
-			// code under test
-			oPromise = oRequestor.refreshSecurityToken();
-
-			assert.strictEqual(oRequestor.refreshSecurityToken(), oPromise, "promise reused");
-			assert.ok(jQuery.ajax.calledOnce, "only one HEAD request underway at any time");
-
-			return oPromise.then(function () {
-				assert.ok(bSuccess, "success possible");
-				assert.strictEqual(oRequestor.mHeaders["X-CSRF-Token"], "abc123");
-			}, function (oError0) {
-				assert.ok(!bSuccess, "certain failure");
-				assert.strictEqual(oError0, oError);
-				assert.strictEqual("X-CSRF-Token" in oRequestor.mHeaders, false);
-			}).then(function () {
-				var oNewPromise = oRequestor.refreshSecurityToken();
-
-				assert.notStrictEqual(oNewPromise, oPromise, "new promise");
-				// avoid "Uncaught (in promise)"
-				return oNewPromise.catch(function (oError1) {
-					assert.strictEqual(oError1, oError);
-				});
-			});
-		});
+		// code under test
+		oRequestor.request("GET", "SalesOrders", "groupId");
 	});
 
 	//*********************************************************************************************
 	[{
-		sRequired : null, bRequestSucceeds : true, sTitle : "success"
+		sODataVersion : "2.0",
+		mExpectedRequestHeaders : {
+			"Accept" : "application/json",
+			"Content-Type" : "application/json;charset=UTF-8",
+			"DataServiceVersion" : "2.0",
+			"MaxDataServiceVersion" : "2.0",
+			"X-CSRF-Token" : "Fetch"
+		}
 	}, {
-		// simulate a server which does not require a CSRF token, but fails with 403
-		sRequired : null, bRequestSucceeds : false, sTitle : "failure with 403"
-	}, {
-		// simulate a server which does not require a CSRF token, but fails otherwise
-		sRequired : "Required", bRequestSucceeds : false, iStatus : 500, sTitle : "failure with 500"
-	}, {
-		sRequired : "Required", sTitle : "CSRF token Required"
-	}, {
-		sRequired : "required", sTitle : "CSRF token required"
-	}, {
-		sRequired : "Required", bReadFails : true, sTitle : "fetch CSRF token fails"
-	}, {
-		sRequired : "Required", bDoNotDeliverToken : true, sTitle : "no CSRF token can be fetched"
-	}].forEach(function (o) {
-		QUnit.test("request: " + o.sTitle, function (assert) {
-			var oError = {},
-				oReadFailure = {},
-				oRequestor = _Requestor.create("/Service/"),
-				oRequestPayload = {},
-				oResponsePayload = {},
-				fnSubmit = sinon.spy(),
-				bSuccess = o.bRequestSucceeds !== false && !o.bReadFails && !o.bDoNotDeliverToken,
-				oTokenRequiredResponse = {
-					getResponseHeader : function (sName) {
-						// Note: getResponseHeader treats sName case insensitive!
-						assert.strictEqual(sName, "X-CSRF-Token");
-						return o.sRequired;
-					},
-					"status" : o.iStatus || 403
-				};
+		sODataVersion : "4.0",
+		mExpectedRequestHeaders : {
+			"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
+			"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true",
+			"OData-MaxVersion" : "4.0",
+			"OData-Version" : "4.0",
+			"X-CSRF-Token" : "Fetch"
+		}
+	}].forEach(function (oFixture) {
+		var sTitle = "request: OData version specific headers for $direct; sODataVersion = "
+				+ oFixture.sODataVersion;
 
-			this.mock(_Helper).expects("createError")
-				.exactly(bSuccess || o.bReadFails ? 0 : 1)
-				.withExactArgs(sinon.match.same(oTokenRequiredResponse))
-				.returns(oError);
+		QUnit.test(sTitle, function (assert) {
+			var oConvertedResponse = {},
+				sMetaPath = "~",
+				oRequestor = _Requestor.create(sServiceUrl, oModelInterface, undefined, undefined,
+					oFixture.sODataVersion),
+				oRequestorMock = this.mock(oRequestor),
+				oResponsePayload = {};
 
-			// With <code>bRequestSucceeds === false</code>, "request" always fails,
-			// with <code>bRequestSucceeds === true</code>, "request" always succeeds,
-			// else "request" first fails due to missing CSRF token which can be fetched via
-			// "ODataModel#refreshSecurityToken".
-			this.stub(jQuery, "ajax", function (sUrl0, oSettings) {
-				var jqXHR;
+			this.mock(jQuery).expects("ajax")
+				.withExactArgs(sServiceUrl + "Employees", {
+					data : undefined,
+					headers : sinon.match(oFixture.mExpectedRequestHeaders),
+					method : "GET"
+				}).returns(createMock(assert, oResponsePayload, "OK"));
+			oRequestorMock.expects("doCheckVersionHeader")
+				.withExactArgs(sinon.match.func, "Employees");
+			oRequestorMock.expects("doConvertResponse")
+				.withExactArgs(oResponsePayload, sMetaPath)
+				.returns(oConvertedResponse);
 
-				assert.strictEqual(sUrl0, "/Service/foo");
-				assert.strictEqual(oSettings.data, JSON.stringify(oRequestPayload));
-				assert.strictEqual(oSettings.method, "FOO");
-				assert.strictEqual(oSettings.headers.foo, "bar");
-
-				if (o.bRequestSucceeds === true
-					|| o.bRequestSucceeds === undefined
-					&& oSettings.headers["X-CSRF-Token"] === "abc123") {
-					jqXHR = createMock(assert, oResponsePayload, "OK");
-				} else {
-					jqXHR = new jQuery.Deferred();
-					setTimeout(function () {
-						jqXHR.reject(oTokenRequiredResponse);
-					}, 0);
-				}
-
-				return jqXHR;
-			});
-
-			if (o.bRequestSucceeds !== undefined) {
-				this.mock(oRequestor).expects("refreshSecurityToken").never();
-			} else {
-				this.stub(oRequestor, "refreshSecurityToken", function () {
-					return new Promise(function (fnResolve, fnReject) {
-						setTimeout(function () {
-							if (o.bReadFails) { // reading of CSRF token fails
-								fnReject(oReadFailure);
-							} else {
-								// HEAD might succeed, but not deliver a valid CSRF token
-								oRequestor.mHeaders["X-CSRF-Token"]
-									= o.bDoNotDeliverToken ? undefined : "abc123";
-								fnResolve();
-							}
-						}, 0);
-					});
-				});
-			}
-
-			return oRequestor.request("FOO", "foo", "$direct", {"foo" : "bar"}, oRequestPayload,
-					fnSubmit)
-				.then(function (oPayload) {
-					assert.ok(bSuccess, "success possible");
-					sinon.assert.calledOnce(fnSubmit);
-					assert.strictEqual(oPayload, oResponsePayload);
-				}, function (oError0) {
-					assert.ok(!bSuccess, "certain failure");
-					sinon.assert.calledOnce(fnSubmit);
-					assert.strictEqual(oError0, o.bReadFails ? oReadFailure : oError);
+			// code under test
+			// we do not test sendRequest() because "Content-Type" is added by request()
+			return oRequestor.request("GET", "Employees", "$direct", undefined, undefined,
+					undefined, undefined, sMetaPath)
+				.then(function (result) {
+					assert.strictEqual(result, oConvertedResponse);
 				});
 		});
 	});
 
 	//*********************************************************************************************
-	QUnit.test("$batch repeated", function (assert) {
-		var oBatchRequest = {
-				body : "payload",
-				headers : {
-					"Content-Type" : "multipart/mixed; boundary=batch_id-0123456789012-345",
-					"MIME-Version" : "1.0"
-				}
-			},
-			oCleanedPayload = {},
-			oRequestor = _Requestor.create("/Service/", {"_foo" : "_bar"}, {"sap-client" : "111"}),
-			oRequestPayload = {},
-			sResponseContentType = "multipart/mixed; boundary=foo",
-			oResponsePayload = {},
-			oTokenRequiredResponse = {
-				getResponseHeader : function (sName) {
-					// Note: getResponseHeader treats sName case insensitive!
-					assert.strictEqual(sName, "X-CSRF-Token");
-					return "required";
-				},
-				"status" : 403
-			};
+	QUnit.test("request: fail to convert payload, $direct", function (assert) {
+		var oError = {},
+			oRequestor = _Requestor.create(sServiceUrl, oModelInterface, undefined, undefined,
+				"2.0"),
+			oResponsePayload = {};
 
-		this.mock(_Requestor).expects("cleanBatch").twice()
-			.withExactArgs(sinon.match.same(oRequestPayload))
-			.returns(oCleanedPayload);
-		this.mock(_Batch).expects("serializeBatchRequest").twice()
-			.withExactArgs(sinon.match.same(oCleanedPayload))
-			.returns(oBatchRequest);
-		this.mock(_Batch).expects("deserializeBatchResponse").once()
-			.withExactArgs(sResponseContentType, sinon.match.same(oResponsePayload))
-			.returns(oResponsePayload);
-		this.mock(_Helper).expects("createError").never();
+		this.mock(jQuery).expects("ajax")
+			.withArgs(sServiceUrl + "Employees")
+			.returns(createMock(assert, oResponsePayload, "OK", {"DataServiceVersion" : "2.0"}));
+		this.mock(oRequestor).expects("doConvertResponse")
+			.withExactArgs(oResponsePayload, undefined)
+			.throws(oError);
 
-		// "request" first fails due to missing CSRF token which can be fetched via
-		// "ODataModel#refreshSecurityToken".
-		this.stub(jQuery, "ajax", function (sUrl0, oSettings) {
-			var jqXHR;
-
-			assert.strictEqual(sUrl0, "/Service/$batch?sap-client=111");
-			assert.strictEqual(oSettings.data, oBatchRequest.body);
-			assert.strictEqual(oSettings.method, "FOO");
-
-			if (oSettings.headers["X-CSRF-Token"] === "abc123") {
-				jqXHR = createMock(assert, oResponsePayload, "OK", null, sResponseContentType);
-			} else {
-				jqXHR = new jQuery.Deferred();
-				setTimeout(function () {
-					jqXHR.reject(oTokenRequiredResponse);
-				}, 0);
-			}
-
-			delete oSettings.headers["X-CSRF-Token"];
-			assert.deepEqual(oSettings.headers, {
-				"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
-				"Content-Type" : "multipart/mixed; boundary=batch_id-0123456789012-345",
-				"MIME-Version" : "1.0",
-				"OData-MaxVersion" : "4.0",
-				"OData-Version" : "4.0",
-				"_foo" : "_bar",
-				"foo" : "bar"
-			});
-
-			return jqXHR;
-		});
-
-		this.stub(oRequestor, "refreshSecurityToken", function () {
-			return new Promise(function (fnResolve, fnReject) {
-				setTimeout(function () {
-					oRequestor.mHeaders["X-CSRF-Token"] = "abc123";
-					fnResolve();
-				}, 0);
-			});
-		});
-
-		return oRequestor.request("FOO", "$batch", "$direct", {"foo" : "bar"}, oRequestPayload)
-			.then(function (oPayload) {
-				assert.strictEqual(oPayload, oResponsePayload);
+		// code under test
+		return oRequestor.request("GET", "Employees", "$direct")
+			.then(function (result) {
+				assert.notOk("Unexpected success");
 			}, function (oError0) {
-				assert.ok(false);
+				assert.strictEqual(oError0, oError);
 			});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("submitBatch(...): with empty group", function (assert) {
-		var oRequestor = _Requestor.create();
-
-		this.mock(oRequestor).expects("request").never();
-
-		return oRequestor.submitBatch("testGroupId").then(function (oResult) {
-			assert.deepEqual(oResult, undefined);
-		});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("submitBatch(...): success", function (assert) {
-		var aExpectedRequests = [[{
-				method : "POST",
-				url : "Customers",
-				headers : {
-					"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
-					"Accept-Language" : "ab-CD",
-					"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true",
-					"Foo" : "baz"
-				},
-				body : {"ID" : 1},
-				$cancel : undefined,
-				$promise : sinon.match.defined,
-				$reject : sinon.match.func,
-				$resolve : sinon.match.func,
-				$submit : undefined
-			}, {
-				method : "DELETE",
-				url : "SalesOrders('42')",
-				headers : {
-					"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
-					"Accept-Language" : "ab-CD",
-					"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true"
-				},
-				body : undefined,
-				$cancel : undefined,
-				$promise : sinon.match.defined,
-				$reject : sinon.match.func,
-				$resolve : sinon.match.func,
-				$submit : undefined
-			}], {
-				method : "GET",
-				url : "Products",
-				headers : {
-					"Accept" : "application/json;odata.metadata=full",
-					"Accept-Language" : "ab-CD",
-					"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true",
-					"Foo" : "bar"
-				},
-				body : undefined,
-				$cancel : undefined,
-				$promise : sinon.match.defined,
-				$reject : sinon.match.func,
-				$resolve : sinon.match.func,
-				$submit : undefined
-			}],
-			aPromises = [],
-			aResults = [{"foo1" : "bar1"}, {"foo2" : "bar2"}, undefined],
-			aBatchResults = [[
-					{responseText : JSON.stringify(aResults[1])},
-					{responseText : ""}
-				],
-				{responseText : JSON.stringify(aResults[0])}
-			],
-			oRequestor = _Requestor.create("/Service/", {"Accept-Language" : "ab-CD"});
-
-		aPromises.push(oRequestor.request("GET", "Products", "group1", {
-			Foo : "bar",
-			Accept : "application/json;odata.metadata=full"
-		}).then(function (oResult) {
-			assert.deepEqual(oResult, aResults[0]);
-			aResults[0] = null;
-		}));
-		aPromises.push(oRequestor.request("POST", "Customers", "group1", {
-			Foo : "baz"
-		}, {
-			"ID" : 1
-		}).then(function (oResult) {
-			assert.deepEqual(oResult, aResults[1]);
-			aResults[1] = null;
-		}));
-		aPromises.push(oRequestor.request("DELETE", "SalesOrders('42')", "group1")
-			.then(function (oResult) {
-				assert.deepEqual(oResult, aResults[2]);
-				aResults[2] = null;
-			}));
-		oRequestor.request("GET", "SalesOrders", "group2");
-
-		this.mock(oRequestor).expects("request")
-			.withExactArgs("POST", "$batch", undefined, {"Accept" : "multipart/mixed"},
-				aExpectedRequests)
-			.returns(Promise.resolve(aBatchResults));
-
-		aPromises.push(oRequestor.submitBatch("group1").then(function (oResult) {
-			assert.strictEqual(oResult, undefined);
-			assert.deepEqual(aResults, [null, null, null], "all batch requests already resolved");
-		}));
-		aPromises.push(oRequestor.submitBatch("group1")); // must not call request again
-
-		assert.strictEqual(oRequestor.mBatchQueue.group1, undefined);
-		TestUtils.deepContains(oRequestor.mBatchQueue.group2, [[/*change set*/], {
-			method : "GET",
-			url : "SalesOrders"
-		}]);
-
-		return Promise.all(aPromises);
-	});
-
-	//*********************************************************************************************
-	QUnit.test("submitBatch(...): single GET", function (assert) {
-		var oRequestor = _Requestor.create("/");
-
-		oRequestor.request("GET", "Products", "groupId");
-		this.mock(oRequestor).expects("request")
-			.withExactArgs("POST", "$batch", undefined, {"Accept" : "multipart/mixed"}, [
-				// Note: no empty change set!
-				sinon.match({method : "GET", url : "Products"})
-			]).returns(Promise.resolve([
-				{responseText : "{}"}
-			]));
-
-		// code under test
-		return oRequestor.submitBatch("groupId");
-	});
-
-	//*********************************************************************************************
-	QUnit.test("submitBatch(...): merge PATCH requests", function (assert) {
-		var aPromises = [],
-			oRequestor = _Requestor.create("/"),
-			fnSubmit0 = sinon.spy(),
-			fnSubmit1 = sinon.spy(),
-			fnSubmit2 = sinon.spy(),
-			fnSubmit3 = sinon.spy();
-
-		aPromises.push(oRequestor
-			.request("PATCH", "Products('0')", "groupId", {}, {Name : null}));
-		oRequestor.request("PATCH", "Products('0')", "anotherGroupId", {}, {Name : "foo"});
-		aPromises.push(oRequestor
-			.request("PATCH", "Products('0')", "groupId", {}, {Name : "bar"}));
-		aPromises.push(oRequestor
-			.request("GET", "Products", "groupId", undefined, undefined, fnSubmit0));
-		aPromises.push(oRequestor
-			.request("PATCH", "Products('0')", "groupId", {}, {Note : "hello, world"}));
-		// just different headers
-		aPromises.push(oRequestor
-			.request("PATCH", "Products('0')", "groupId", {"If-Match" : ""}, {Note : "no merge!"}));
-		// just a different verb
-		aPromises.push(oRequestor
-			.request("POST", "Products", "groupId", {"If-Match" : ""}, {Name : "baz"}, fnSubmit1));
-		// structured property
-		// first set to null: may be merged with each other, but not with PATCHES to properties
-		aPromises.push(oRequestor
-			.request("PATCH", "BusinessPartners('42')", "groupId", {"If-Match" : ""},
-				{Address : null}));
-		aPromises.push(oRequestor
-			.request("PATCH", "BusinessPartners('42')", "groupId", {"If-Match" : ""},
-				{Address : null}));
-		// then two different properties therein: must be merged
-		aPromises.push(oRequestor
-			.request("PATCH", "BusinessPartners('42')", "groupId", {"If-Match" : ""},
-				{Address : {City : "Walldorf"}}, fnSubmit2));
-		aPromises.push(oRequestor
-			.request("PATCH", "BusinessPartners('42')", "groupId", {"If-Match" : ""},
-				{Address : {PostalCode : "69190"}}, fnSubmit3));
-		this.mock(oRequestor).expects("request")
-			.withExactArgs("POST", "$batch", undefined, {"Accept" : "multipart/mixed"}, [
-				[
-					sinon.match({
-						body : {Name : "bar", Note : "hello, world"},
-						method : "PATCH",
-						url : "Products('0')"
-					}),
-					sinon.match({
-						body : {Note : "no merge!"},
-						method : "PATCH",
-						url : "Products('0')"
-					}),
-					sinon.match({
-						body : {Name : "baz"},
-						method : "POST",
-						url : "Products"
-					}),
-					sinon.match({
-						body : {Address : null},
-						method : "PATCH",
-						url : "BusinessPartners('42')"
-					}),
-					sinon.match({
-						body : {Address : {City : "Walldorf", PostalCode : "69190"}},
-						method : "PATCH",
-						url : "BusinessPartners('42')"
-					})
-				],
-				sinon.match({
-					method : "GET",
-					url : "Products"
-				})
-			]).returns(Promise.resolve([
-				[
-					{responseText : JSON.stringify({Name : "bar", Note : "hello, world"})},
-					{responseText : JSON.stringify({Note : "no merge!"})},
-					{responseText : JSON.stringify({Name : "baz"})},
-					{responseText : JSON.stringify({Address : null})},
-					{responseText :
-						JSON.stringify({Address : {City : "Walldorf", PostalCode : "69190"}})}
-				],
-				{responseText : JSON.stringify({Name : "Name", Note : "Note"})}
-			]));
-
-		// code under test
-		aPromises.push(oRequestor.submitBatch("groupId"));
-
-		sinon.assert.calledOnce(fnSubmit0);
-		sinon.assert.calledWithExactly(fnSubmit0);
-		sinon.assert.calledOnce(fnSubmit1);
-		sinon.assert.calledWithExactly(fnSubmit1);
-		sinon.assert.calledOnce(fnSubmit2);
-		sinon.assert.calledWithExactly(fnSubmit2);
-		sinon.assert.calledOnce(fnSubmit3);
-		sinon.assert.calledWithExactly(fnSubmit3);
-		return Promise.all(aPromises).then(function (aResults) {
-			assert.deepEqual(aResults, [
-				{Name : "bar", Note : "hello, world"}, // 1st PATCH
-				{Name : "bar", Note : "hello, world"}, // 2nd PATCH, merged with 1st
-				{Name : "Name", Note : "Note"}, // GET
-				{Name : "bar", Note : "hello, world"}, // 3rd PATCH, merged with 1st and 2nd
-				{Note : "no merge!"}, // PATCH with different headers
-				{Name : "baz"}, // POST
-				{Address : null},
-				{Address : null},
-				{Address : {City : "Walldorf", PostalCode : "69190"}},
-				{Address : {City : "Walldorf", PostalCode : "69190"}},
-				undefined // submitBatch()
-			]);
-		});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("submitBatch(...): $batch failure", function (assert) {
-		var oBatchError = new Error("$batch request failed"),
-			aPromises = [],
-			oRequestor = _Requestor.create();
-
-		function unexpectedSuccess() {
-			assert.ok(false, "unexpected success");
-		}
-
-		function assertError(oError) {
-			assert.ok(oError instanceof Error);
-			assert.strictEqual(oError.message,
-				"HTTP request was not processed because $batch failed");
-			assert.strictEqual(oError.cause, oBatchError);
-		}
-
-		aPromises.push(oRequestor.request("PATCH", "Products('0')", "group", {}, {Name : "foo"})
-			.then(unexpectedSuccess, assertError));
-		aPromises.push(oRequestor.request("PATCH", "Products('1')", "group", {}, {Name : "foo"})
-			.then(unexpectedSuccess, assertError));
-		aPromises.push(oRequestor.request("GET", "Products", "group")
-			.then(unexpectedSuccess, assertError));
-		aPromises.push(oRequestor.request("GET", "Customers", "group")
-			.then(unexpectedSuccess, assertError));
-
-		this.mock(oRequestor).expects("request")
-			.returns(Promise.reject(oBatchError));
-
-		aPromises.push(oRequestor.submitBatch("group").then(unexpectedSuccess, function (oError) {
-			assert.strictEqual(oError, oBatchError);
-		}));
-
-		return Promise.all(aPromises);
-	});
-
-	//*********************************************************************************************
-	QUnit.test("submitBatch(...): failure followed by another request", function (assert) {
-		var oError = {error : {message : "404 Not found"}},
-			aBatchResult = [{
-				headers : {},
-				responseText : "{}",
-				status : 200,
-				statusText : "ok"
-			}, {
-				getResponseHeader : function () {
-					return "application/json";
-				},
-				headers : {"Content-Type" :"application/json"},
-				responseText : JSON.stringify(oError),
-				status : 404,
-				statusText : "Not found"
-			}],
-			aPromises = [],
-			oRequestor = _Requestor.create();
-
-		function unexpected () {
-			assert.ok(false);
-		}
-
-		function assertError(oResultError, sMessage) {
-			assert.ok(oResultError instanceof Error);
-			assert.deepEqual(oResultError.error, oError.error);
-			assert.strictEqual(oResultError.message, oError.error.message);
-			assert.strictEqual(oResultError.status, 404);
-			assert.strictEqual(oResultError.statusText, "Not found");
-		}
-
-		aPromises.push(oRequestor.request("GET", "ok", "testGroupId")
-			.then(function (oResult) {
-				assert.deepEqual(oResult, {});
-			}).catch(unexpected));
-
-		aPromises.push(oRequestor.request("GET", "fail", "testGroupId")
-			.then(unexpected, function (oResultError) {
-				assertError(oResultError, oError.error.message);
-			}));
-
-		aPromises.push(oRequestor.request("GET", "ok", "testGroupId")
-			.then(unexpected, function (oResultError) {
-				assert.ok(oResultError instanceof Error);
-				assert.strictEqual(oResultError.message,
-					"HTTP request was not processed because the previous request failed");
-				assertError(oResultError.cause);
-			}));
-
-		this.mock(oRequestor).expects("request")
-			.returns(Promise.resolve(aBatchResult));
-
-		aPromises.push(oRequestor.submitBatch("testGroupId").then(function (oResult) {
-			assert.deepEqual(oResult, undefined);
-		}));
-
-		return Promise.all(aPromises);
-	});
-
-	//*********************************************************************************************
-	QUnit.test("submitBatch(...): error in change set", function (assert) {
-		var oError = {error : {message : "400 Bad Request"}},
-			aBatchResult = [{
-				getResponseHeader : function () {
-					return "application/json";
-				},
-				headers : {"Content-Type" :"application/json"},
-				responseText : JSON.stringify(oError),
-				status : 400,
-				statusText : "Bad Request"
-			}],
-			aPromises = [],
-			oRequestor = _Requestor.create();
-
-		function assertError(oResultError, sMessage) {
-			assert.ok(oResultError instanceof Error);
-			assert.strictEqual(oResultError.message, "400 Bad Request");
-			assert.strictEqual(oResultError.status, 400);
-			assert.strictEqual(oResultError.statusText, "Bad Request");
-		}
-
-		aPromises.push(oRequestor.request("PATCH", "ProductList('HT-1001')", "group",
-				{"If-Match" : "*"}, {Name : "foo"})
-			.then(undefined, assertError));
-
-		aPromises.push(oRequestor.request("POST", "Unknown", "group", undefined, {})
-			.then(undefined, assertError));
-
-		aPromises.push(oRequestor.request("PATCH", "ProductList('HT-1001')", "group",
-				{"If-Match" : "*"}, {Name : "bar"})
-			.then(undefined, assertError));
-
-		aPromises.push(oRequestor.request("GET", "ok", "group")
-			.then(undefined, function (oResultError) {
-				assert.ok(oResultError instanceof Error);
-				assert.strictEqual(oResultError.message,
-					"HTTP request was not processed because the previous request failed");
-				assertError(oResultError.cause);
-			}));
-
-		this.mock(oRequestor).expects("request")
-			.returns(Promise.resolve(aBatchResult));
-
-		aPromises.push(oRequestor.submitBatch("group").then(function (oResult) {
-			assert.deepEqual(oResult, undefined);
-		}));
-
-		return Promise.all(aPromises);
 	});
 
 	//*********************************************************************************************
 	QUnit.test("request(...): batch group id", function (assert) {
-		var oRequestor = _Requestor.create();
+		var oRequestor = _Requestor.create("/", oModelInterface);
 
 		oRequestor.request("PATCH", "EntitySet1", "group", {"foo" : "bar"}, {"a" : "b"});
 		oRequestor.request("PATCH", "EntitySet2", "group", {"bar" : "baz"}, {"c" : "d"});
@@ -1195,7 +737,594 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	QUnit.test("request(...): call with $batch url", function (assert) {
+	QUnit.test("submitBatch: fail, unsupported OData service version", function (assert) {
+		var oError = {},
+			oGetProductsPromise,
+			oRequestor = _Requestor.create("/Service/", oModelInterface),
+			oRequestorMock = this.mock(oRequestor),
+			oResponse = {
+				headers : {
+					"Content-Length" : "42",
+					"OData-Version" : "foo"
+				},
+				responseText : JSON.stringify({d : {foo : "bar"}})
+			};
+
+		oRequestorMock.expects("doConvertResponse").never();
+		oGetProductsPromise = oRequestor.request("GET", "Products", "group1")
+			.then(function () {
+				assert.notOk("Unexpected success");
+			}, function (oError0) {
+				assert.strictEqual(oError0, oError);
+			});
+		oRequestorMock.expects("sendBatch").resolves([oResponse]); // arguments don't matter
+		oRequestorMock.expects("doCheckVersionHeader")
+			.withExactArgs(sinon.match(function (fnGetResponseHeader) {
+				assert.strictEqual(typeof fnGetResponseHeader, "function");
+				assert.strictEqual(fnGetResponseHeader("OData-Version"), "foo",
+					"getResponseHeader has to be called on mResponse");
+				return true;
+			}), "Products", true)
+			.throws(oError);
+
+		return Promise.all([oGetProductsPromise, oRequestor.submitBatch("group1")]);
+	});
+
+	//*********************************************************************************************
+	[false, true].forEach(function (bSuccess) {
+		QUnit.test("refreshSecurityToken: success = " + bSuccess, function (assert) {
+			var oError = {},
+				oPromise,
+				oRequestor = _Requestor.create("/Service/", oModelInterface, undefined,
+					{"sap-client" : "123"}),
+				oTokenRequiredResponse = {};
+
+			this.mock(_Helper).expects("createError")
+				.exactly(bSuccess ? 0 : 2)
+				.withExactArgs(sinon.match.same(oTokenRequiredResponse))
+				.returns(oError);
+
+			this.mock(jQuery).expects("ajax").twice()
+				.withExactArgs("/Service/?sap-client=123", sinon.match({
+					headers : {"X-CSRF-Token" : "Fetch"},
+					method : "HEAD"
+				}))
+				.callsFake(function () {
+					var jqXHR;
+
+					if (bSuccess) {
+						jqXHR = createMock(assert, undefined, "nocontent", {
+							"OData-Version" : "4.0",
+							"X-CSRF-Token" : "abc123"
+						});
+					} else {
+						jqXHR = new jQuery.Deferred();
+						setTimeout(function () {
+							jqXHR.reject(oTokenRequiredResponse);
+						}, 0);
+					}
+
+					return jqXHR;
+				});
+			assert.strictEqual("X-CSRF-Token" in oRequestor.mHeaders, false);
+
+			// code under test
+			oPromise = oRequestor.refreshSecurityToken(undefined);
+
+			assert.strictEqual(oRequestor.refreshSecurityToken(undefined), oPromise,
+				"promise reused");
+			assert.strictEqual(oRequestor.oSecurityTokenPromise, oPromise,
+				"promise stored at requestor instance so that request method can use it");
+
+			return oPromise.then(function () {
+				assert.ok(bSuccess, "success possible");
+				assert.strictEqual(oRequestor.mHeaders["X-CSRF-Token"], "abc123");
+			}, function (oError0) {
+				assert.ok(!bSuccess, "certain failure");
+				assert.strictEqual(oError0, oError);
+				assert.strictEqual("X-CSRF-Token" in oRequestor.mHeaders, false);
+			}).then(function () {
+				// code under test
+				return oRequestor.refreshSecurityToken("some_old_token").then(function () {
+					var oNewPromise;
+
+					// code under test
+					oNewPromise = oRequestor.refreshSecurityToken(
+						oRequestor.mHeaders["X-CSRF-Token"]);
+
+					assert.notStrictEqual(oNewPromise, oPromise, "new promise");
+					// avoid "Uncaught (in promise)"
+					return oNewPromise.catch(function () {
+						assert.ok(!bSuccess, "certain failure");
+					});
+				});
+			});
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("submitBatch(...): with empty group", function (assert) {
+		var oRequestor = _Requestor.create();
+
+		this.mock(oRequestor).expects("request").never();
+
+		return oRequestor.submitBatch("testGroupId").then(function (oResult) {
+			assert.deepEqual(oResult, undefined);
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("submitBatch(...): success", function (assert) {
+		var aCleanedRequests = [],
+			aExpectedRequests = [[{
+				method : "POST",
+				url : "~Customers",
+				headers : {
+					"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
+					"Accept-Language" : "ab-CD",
+					"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true",
+					"Foo" : "baz"
+				},
+				body : {"ID" : 1},
+				$cancel : undefined,
+				$metaPath : undefined,
+				$promise : sinon.match.defined,
+				$reject : sinon.match.func,
+				$resolve : sinon.match.func,
+				$submit : undefined
+			}, {
+				method : "DELETE",
+				url : "~SalesOrders('42')",
+				headers : {
+					"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
+					"Accept-Language" : "ab-CD",
+					"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true"
+				},
+				body : undefined,
+				$cancel : undefined,
+				$metaPath : undefined,
+				$promise : sinon.match.defined,
+				$reject : sinon.match.func,
+				$resolve : sinon.match.func,
+				$submit : undefined
+			}], {
+				method : "GET",
+				url : "~Products",
+				headers : {
+					"Accept" : "application/json;odata.metadata=full",
+					"Accept-Language" : "ab-CD",
+					"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true",
+					"Foo" : "bar"
+				},
+				body : undefined,
+				$cancel : undefined,
+				$metaPath : undefined,
+				$promise : sinon.match.defined,
+				$reject : sinon.match.func,
+				$resolve : sinon.match.func,
+				$submit : undefined
+			}],
+			aPromises = [],
+			aResults = [{"foo1" : "bar1"}, {"foo2" : "bar2"}, undefined],
+			aBatchResults = [[
+					{responseText : JSON.stringify(aResults[1])},
+					{responseText : ""}
+				],
+				{responseText : JSON.stringify(aResults[0])}
+			],
+			oRequestor = _Requestor.create("/Service/", oModelInterface,
+				{"Accept-Language" : "ab-CD"}),
+			oRequestorMock = this.mock(oRequestor);
+
+		oRequestorMock.expects("convertResourcePath").withExactArgs("Products")
+			.returns("~Products");
+		aPromises.push(oRequestor.request("GET", "Products", "group1", {
+			Foo : "bar",
+			Accept : "application/json;odata.metadata=full"
+		}).then(function (oResult) {
+			assert.deepEqual(oResult, aResults[0]);
+			aResults[0] = null;
+		}));
+		oRequestorMock.expects("convertResourcePath").withExactArgs("Customers")
+			.returns("~Customers");
+		aPromises.push(oRequestor.request("POST", "Customers", "group1", {
+			Foo : "baz"
+		}, {
+			"ID" : 1
+		}).then(function (oResult) {
+			assert.deepEqual(oResult, aResults[1]);
+			aResults[1] = null;
+		}));
+		oRequestorMock.expects("convertResourcePath").withExactArgs("SalesOrders('42')")
+			.returns("~SalesOrders('42')");
+		aPromises.push(oRequestor.request("DELETE", "SalesOrders('42')", "group1")
+			.then(function (oResult) {
+				assert.deepEqual(oResult, aResults[2]);
+				aResults[2] = null;
+			}));
+		oRequestorMock.expects("convertResourcePath").withExactArgs("SalesOrders")
+			.returns("~SalesOrders");
+		oRequestor.request("GET", "SalesOrders", "group2");
+		this.mock(_Requestor).expects("cleanBatch")
+			.withExactArgs(aExpectedRequests)
+			.returns(aCleanedRequests);
+
+		this.mock(oRequestor).expects("sendBatch")
+			.withExactArgs(sinon.match.same(aCleanedRequests))
+			.resolves(aBatchResults);
+
+		aPromises.push(oRequestor.submitBatch("group1").then(function (oResult) {
+			assert.strictEqual(oResult, undefined);
+			assert.deepEqual(aResults, [null, null, null], "all batch requests already resolved");
+		}));
+		aPromises.push(oRequestor.submitBatch("group1")); // must not call request again
+
+		assert.strictEqual(oRequestor.mBatchQueue.group1, undefined);
+		TestUtils.deepContains(oRequestor.mBatchQueue.group2, [[/*change set*/], {
+			method : "GET",
+			url : "~SalesOrders"
+		}]);
+
+		return Promise.all(aPromises);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("submitBatch(...): single GET", function (assert) {
+		var oRequestor = _Requestor.create("/", oModelInterface);
+
+		oRequestor.request("GET", "Products", "groupId");
+		this.mock(oRequestor).expects("sendBatch")
+			.withExactArgs([
+				// Note: no empty change set!
+				sinon.match({method : "GET", url : "Products"})
+			]).resolves([
+				{responseText : "{}"}
+			]);
+
+		// code under test
+		return oRequestor.submitBatch("groupId");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("submitBatch(...): merge PATCH requests", function (assert) {
+		var aPromises = [],
+			oRequestor = _Requestor.create("/", oModelInterface),
+			fnSubmit0 = this.spy(),
+			fnSubmit1 = this.spy(),
+			fnSubmit2 = this.spy(),
+			fnSubmit3 = this.spy();
+
+		aPromises.push(oRequestor
+			.request("PATCH", "Products('0')", "groupId", {}, {Name : null}));
+		oRequestor.request("PATCH", "Products('0')", "anotherGroupId", {}, {Name : "foo"});
+		aPromises.push(oRequestor
+			.request("PATCH", "Products('0')", "groupId", {}, {Name : "bar"}));
+		aPromises.push(oRequestor
+			.request("GET", "Products", "groupId", undefined, undefined, fnSubmit0));
+		aPromises.push(oRequestor
+			.request("PATCH", "Products('0')", "groupId", {}, {Note : "hello, world"}));
+		// just different headers
+		aPromises.push(oRequestor
+			.request("PATCH", "Products('0')", "groupId", {"If-Match" : ""}, {Note : "no merge!"}));
+		// just a different verb
+		aPromises.push(oRequestor
+			.request("POST", "Products", "groupId", {"If-Match" : ""}, {Name : "baz"}, fnSubmit1));
+		// structured property
+		// first set to null: may be merged with each other, but not with PATCHES to properties
+		aPromises.push(oRequestor
+			.request("PATCH", "BusinessPartners('42')", "groupId", {"If-Match" : ""},
+				{Address : null}));
+		aPromises.push(oRequestor
+			.request("PATCH", "BusinessPartners('42')", "groupId", {"If-Match" : ""},
+				{Address : null}));
+		// then two different properties therein: must be merged
+		aPromises.push(oRequestor
+			.request("PATCH", "BusinessPartners('42')", "groupId", {"If-Match" : ""},
+				{Address : {City : "Walldorf"}}, fnSubmit2));
+		aPromises.push(oRequestor
+			.request("PATCH", "BusinessPartners('42')", "groupId", {"If-Match" : ""},
+				{Address : {PostalCode : "69190"}}, fnSubmit3));
+		this.mock(oRequestor).expects("sendBatch")
+			.withExactArgs([
+				[
+					sinon.match({
+						body : {Name : "bar", Note : "hello, world"},
+						method : "PATCH",
+						url : "Products('0')"
+					}),
+					sinon.match({
+						body : {Note : "no merge!"},
+						method : "PATCH",
+						url : "Products('0')"
+					}),
+					sinon.match({
+						body : {Name : "baz"},
+						method : "POST",
+						url : "Products"
+					}),
+					sinon.match({
+						body : {Address : null},
+						method : "PATCH",
+						url : "BusinessPartners('42')"
+					}),
+					sinon.match({
+						body : {Address : {City : "Walldorf", PostalCode : "69190"}},
+						method : "PATCH",
+						url : "BusinessPartners('42')"
+					})
+				],
+				sinon.match({
+					method : "GET",
+					url : "Products"
+				})
+			]).resolves([
+				[
+					{responseText : JSON.stringify({Name : "bar", Note : "hello, world"})},
+					{responseText : JSON.stringify({Note : "no merge!"})},
+					{responseText : JSON.stringify({Name : "baz"})},
+					{responseText : JSON.stringify({Address : null})},
+					{responseText :
+						JSON.stringify({Address : {City : "Walldorf", PostalCode : "69190"}})}
+				],
+				{responseText : JSON.stringify({Name : "Name", Note : "Note"})}
+			]);
+
+		// code under test
+		aPromises.push(oRequestor.submitBatch("groupId"));
+
+		sinon.assert.calledOnce(fnSubmit0);
+		sinon.assert.calledWithExactly(fnSubmit0);
+		sinon.assert.calledOnce(fnSubmit1);
+		sinon.assert.calledWithExactly(fnSubmit1);
+		sinon.assert.calledOnce(fnSubmit2);
+		sinon.assert.calledWithExactly(fnSubmit2);
+		sinon.assert.calledOnce(fnSubmit3);
+		sinon.assert.calledWithExactly(fnSubmit3);
+		return Promise.all(aPromises).then(function (aResults) {
+			assert.deepEqual(aResults, [
+				{Name : "bar", Note : "hello, world"}, // 1st PATCH
+				{Name : "bar", Note : "hello, world"}, // 2nd PATCH, merged with 1st
+				{Name : "Name", Note : "Note"}, // GET
+				{Name : "bar", Note : "hello, world"}, // 3rd PATCH, merged with 1st and 2nd
+				{Note : "no merge!"}, // PATCH with different headers
+				{Name : "baz"}, // POST
+				{Address : null},
+				{Address : null},
+				{Address : {City : "Walldorf", PostalCode : "69190"}},
+				{Address : {City : "Walldorf", PostalCode : "69190"}},
+				undefined // submitBatch()
+			]);
+		});
+	});
+
+	//*********************************************************************************************
+	[{
+		sODataVersion : "2.0",
+		mExpectedRequestHeaders : {
+			"Accept" : "application/json",
+			"Content-Type" : "application/json;charset=UTF-8"
+		},
+		mProductsResponse : {d : {results : [{foo : "bar"}]}}
+	}, {
+		sODataVersion : "4.0",
+		mExpectedRequestHeaders : {
+			"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
+			"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true"
+		},
+		mProductsResponse : {value : [{foo : "bar"}]}
+	}].forEach(function (oFixture) {
+		var sTitle = "submitBatch(...): OData version specific headers; sODataVersion="
+			+ oFixture.sODataVersion;
+
+		QUnit.test(sTitle, function (assert) {
+			var oConvertedPayload = {},
+				sMetaPath = "~",
+				aExpectedRequests = [{
+					method : "GET",
+					url : "Products",
+					headers : oFixture.mExpectedRequestHeaders,
+					body : undefined,
+					$cancel : undefined,
+					$metaPath : sMetaPath,
+					$promise : sinon.match.defined,
+					$reject : sinon.match.func,
+					$resolve : sinon.match.func,
+					$submit : undefined
+				}],
+				oGetProductsPromise,
+				oRequestor = _Requestor.create("/Service/", oModelInterface, undefined, undefined,
+					oFixture.sODataVersion),
+				oRequestorMock = this.mock(oRequestor);
+
+			oRequestorMock.expects("doConvertResponse")
+			// not same; it is stringified and parsed
+				.withExactArgs(oFixture.mProductsResponse, sMetaPath)
+				.returns(oConvertedPayload);
+			oGetProductsPromise = oRequestor.request("GET", "Products", "group1", undefined,
+				undefined, undefined, undefined, sMetaPath)
+				.then(function (oResponse) {
+					assert.strictEqual(oResponse, oConvertedPayload);
+				});
+
+			oRequestorMock.expects("sendBatch")
+				.withExactArgs(aExpectedRequests)
+				.resolves([
+					{responseText : JSON.stringify(oFixture.mProductsResponse)}
+				]);
+
+			return Promise.all([oGetProductsPromise, oRequestor.submitBatch("group1")]);
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("submitBatch: fail to convert payload", function (assert) {
+		var oError = {},
+			oGetProductsPromise,
+			oRequestor = _Requestor.create("/Service/", oModelInterface, undefined, undefined,
+				"2.0"),
+			oRequestorMock = this.mock(oRequestor),
+			oResponse = {d : {foo : "bar"}};
+
+		oRequestorMock.expects("doConvertResponse")
+			.withExactArgs(oResponse, undefined)
+			.throws(oError);
+		oGetProductsPromise = oRequestor.request("GET", "Products", "group1")
+			.then(function () {
+				assert.notOk("Unexpected success");
+			}, function (oError0) {
+				assert.strictEqual(oError0, oError);
+			});
+		oRequestorMock.expects("sendBatch") // arguments don't matter
+			.resolves([{responseText : JSON.stringify(oResponse)}]);
+
+		return Promise.all([oGetProductsPromise, oRequestor.submitBatch("group1")]);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("submitBatch(...): $batch failure", function (assert) {
+		var oBatchError = new Error("$batch request failed"),
+			aPromises = [],
+			oRequestor = _Requestor.create("/", oModelInterface);
+
+		function unexpectedSuccess() {
+			assert.ok(false, "unexpected success");
+		}
+
+		function assertError(oError) {
+			assert.ok(oError instanceof Error);
+			assert.strictEqual(oError.message,
+				"HTTP request was not processed because $batch failed");
+			assert.strictEqual(oError.cause, oBatchError);
+		}
+
+		aPromises.push(oRequestor.request("PATCH", "Products('0')", "group", {}, {Name : "foo"})
+			.then(unexpectedSuccess, assertError));
+		aPromises.push(oRequestor.request("PATCH", "Products('1')", "group", {}, {Name : "foo"})
+			.then(unexpectedSuccess, assertError));
+		aPromises.push(oRequestor.request("GET", "Products", "group")
+			.then(unexpectedSuccess, assertError));
+		aPromises.push(oRequestor.request("GET", "Customers", "group")
+			.then(unexpectedSuccess, assertError));
+
+		this.mock(oRequestor).expects("sendBatch").rejects(oBatchError); // arguments don't matter
+
+		aPromises.push(oRequestor.submitBatch("group").then(unexpectedSuccess, function (oError) {
+			assert.strictEqual(oError, oBatchError);
+		}));
+
+		return Promise.all(aPromises);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("submitBatch(...): failure followed by another request", function (assert) {
+		var oError = {error : {message : "404 Not found"}},
+			aBatchResult = [{
+				headers : {},
+				responseText : "{}",
+				status : 200
+			}, {
+				getResponseHeader : function () {
+					return "application/json";
+				},
+				headers : {"Content-Type" :"application/json"},
+				responseText : JSON.stringify(oError),
+				status : 404,
+				statusText : "Not found"
+			}],
+			aPromises = [],
+			oRequestor = _Requestor.create("/", oModelInterface);
+
+		function unexpected () {
+			assert.ok(false);
+		}
+
+		function assertError(oResultError, sMessage) {
+			assert.ok(oResultError instanceof Error);
+			assert.deepEqual(oResultError.error, oError.error);
+			assert.strictEqual(oResultError.message, oError.error.message);
+			assert.strictEqual(oResultError.status, 404);
+			assert.strictEqual(oResultError.statusText, "Not found");
+		}
+
+		aPromises.push(oRequestor.request("GET", "ok", "testGroupId")
+			.then(function (oResult) {
+				assert.deepEqual(oResult, {});
+			}).catch(unexpected));
+
+		aPromises.push(oRequestor.request("GET", "fail", "testGroupId")
+			.then(unexpected, function (oResultError) {
+				assertError(oResultError, oError.error.message);
+			}));
+
+		aPromises.push(oRequestor.request("GET", "ok", "testGroupId")
+			.then(unexpected, function (oResultError) {
+				assert.ok(oResultError instanceof Error);
+				assert.strictEqual(oResultError.message,
+					"HTTP request was not processed because the previous request failed");
+				assertError(oResultError.cause);
+			}));
+
+		this.mock(oRequestor).expects("sendBatch").resolves(aBatchResult); // arguments don't matter
+
+		aPromises.push(oRequestor.submitBatch("testGroupId").then(function (oResult) {
+			assert.deepEqual(oResult, undefined);
+		}));
+
+		return Promise.all(aPromises);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("submitBatch(...): error in change set", function (assert) {
+		var oError = {error : {message : "400 Bad Request"}},
+			aBatchResult = [{
+				getResponseHeader : function () {
+					return "application/json";
+				},
+				headers : {"Content-Type" :"application/json"},
+				responseText : JSON.stringify(oError),
+				status : 400,
+				statusText : "Bad Request"
+			}],
+			aPromises = [],
+			oRequestor = _Requestor.create("/", oModelInterface);
+
+		function assertError(oResultError, sMessage) {
+			assert.ok(oResultError instanceof Error);
+			assert.strictEqual(oResultError.message, "400 Bad Request");
+			assert.strictEqual(oResultError.status, 400);
+			assert.strictEqual(oResultError.statusText, "Bad Request");
+		}
+
+		aPromises.push(oRequestor.request("PATCH", "ProductList('HT-1001')", "group",
+				{"If-Match" : "*"}, {Name : "foo"})
+			.then(undefined, assertError));
+
+		aPromises.push(oRequestor.request("POST", "Unknown", "group", undefined, {})
+			.then(undefined, assertError));
+
+		aPromises.push(oRequestor.request("PATCH", "ProductList('HT-1001')", "group",
+				{"If-Match" : "*"}, {Name : "bar"})
+			.then(undefined, assertError));
+
+		aPromises.push(oRequestor.request("GET", "ok", "group")
+			.then(undefined, function (oResultError) {
+				assert.ok(oResultError instanceof Error);
+				assert.strictEqual(oResultError.message,
+					"HTTP request was not processed because the previous request failed");
+				assertError(oResultError.cause);
+			}));
+
+		this.mock(oRequestor).expects("sendBatch").resolves(aBatchResult); // arguments don't matter
+
+		aPromises.push(oRequestor.submitBatch("group").then(function (oResult) {
+			assert.deepEqual(oResult, undefined);
+		}));
+
+		return Promise.all(aPromises);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("sendBatch(...)", function (assert) {
 		var oBatchRequest = {
 				body : "abcd",
 				headers : {
@@ -1205,32 +1334,29 @@ sap.ui.require([
 			},
 			aBatchRequests = [{}],
 			aExpectedResponses = [],
-			oRequestor = _Requestor.create("/Service/", undefined, {"sap-client" : "123"}),
+			oRequestor = _Requestor.create("/Service/", oModelInterface, undefined,
+				{"sap-client" : "123"}),
 			oResult = "abc",
-			sResponseContentType = "multipart/mixed; boundary=foo",
-			oJqXHRMock = createMock(assert, oResult, "OK", "abc123", sResponseContentType);
+			sResponseContentType = "multipart/mixed; boundary=foo";
 
 		this.mock(_Batch).expects("serializeBatchRequest")
 			.withExactArgs(sinon.match.same(aBatchRequests))
 			.returns(oBatchRequest);
 
-		this.mock(jQuery).expects("ajax")
-			.withExactArgs("/Service/$batch?sap-client=123", {
-				data : oBatchRequest.body,
-				headers : sinon.match({
+		this.mock(oRequestor).expects("sendRequest")
+			.withExactArgs("POST", "$batch?sap-client=123", sinon.match({
 					"Content-Type" : oBatchRequest.headers["Content-Type"],
 					"MIME-Version" : oBatchRequest.headers["MIME-Version"]
-				}),
-				method : "POST"
-			}).returns(oJqXHRMock);
+				}), sinon.match.same(oBatchRequest.body))
+			.resolves({contentType : sResponseContentType, body : oResult});
 
 		this.mock(_Batch).expects("deserializeBatchResponse")
 			.withExactArgs(sResponseContentType, oResult)
 			.returns(aExpectedResponses);
 
-		return oRequestor.request("POST", "$batch", "$direct", undefined, aBatchRequests)
+		return oRequestor.sendBatch(aBatchRequests)
 			.then(function (oPayload) {
-				assert.strictEqual(aExpectedResponses, oPayload);
+				assert.strictEqual(oPayload, aExpectedResponses);
 			});
 	});
 
@@ -1243,7 +1369,7 @@ sap.ui.require([
 			oJQueryMock = this.mock(jQuery),
 			aPromises = [],
 			sServiceUrl = "/Service/",
-			oRequestor = _Requestor.create(sServiceUrl);
+			oRequestor = _Requestor.create(sServiceUrl, oModelInterface);
 
 		// expects a jQuery.ajax for a batch request and returns a mock for it to be resolved later
 		function expectBatch() {
@@ -1262,7 +1388,12 @@ sap.ui.require([
 					.returns([{}]);
 
 				jqXHR.resolve("body", "OK", { // mock jqXHR for success handler
-					getResponseHeader : function () { return null; }
+					getResponseHeader : function (sHeader) {
+						if (sHeader === "OData-Version") {
+							return "4.0";
+						}
+						return null;
+					}
 				});
 			});
 		}
@@ -1310,14 +1441,15 @@ sap.ui.require([
 
 	//*****************************************************************************************
 	QUnit.test("cancelChanges: various requests", function (assert) {
-		var fnCancel1 = sinon.spy(),
-			fnCancel2 = sinon.spy(),
-			fnCancel3 = sinon.spy(),
-			fnCancelPost = sinon.spy(),
+		var fnCancel1 = this.spy(),
+			fnCancel2 = this.spy(),
+			fnCancel3 = this.spy(),
+			fnCancelPost = this.spy(),
 			iCount = 1,
 			oPostData = {},
 			oPromise,
-			oRequestor = _Requestor.create("/Service/", undefined, {"sap-client" : "123"});
+			oRequestor = _Requestor.create("/Service/", oModelInterface, undefined,
+				{"sap-client" : "123"});
 
 		function unexpected () {
 			assert.ok(false);
@@ -1354,7 +1486,7 @@ sap.ui.require([
 		// code under test
 		assert.strictEqual(oRequestor.hasPendingChanges(), true);
 
-		sinon.spy(oRequestor, "cancelChangesByFilter");
+		this.spy(oRequestor, "cancelChangesByFilter");
 
 		// code under test
 		oRequestor.cancelChanges("groupId");
@@ -1370,8 +1502,8 @@ sap.ui.require([
 		// code under test
 		assert.strictEqual(oRequestor.hasPendingChanges(), false);
 
-		this.mock(oRequestor).expects("request")
-			.withExactArgs("POST", "$batch", undefined, {"Accept" : "multipart/mixed"}, [
+		this.mock(oRequestor).expects("sendBatch")
+			.withExactArgs([
 				sinon.match({
 					method : "POST",
 					url : "ActionImport('42')"
@@ -1380,7 +1512,7 @@ sap.ui.require([
 					method : "GET",
 					url : "Employees"
 				})
-			]).returns(Promise.resolve([{}, {}]));
+			]).resolves([{}, {}]);
 
 		oRequestor.submitBatch("groupId");
 
@@ -1391,7 +1523,8 @@ sap.ui.require([
 	QUnit.test("cancelChanges: only PATCH", function (assert) {
 		var fnCancel = function () {},
 			oPromise,
-			oRequestor = _Requestor.create("/Service/", undefined, {"sap-client" : "123"});
+			oRequestor = _Requestor.create("/Service/", oModelInterface, undefined,
+				{"sap-client" : "123"});
 
 		function unexpected () {
 			assert.ok(false);
@@ -1424,14 +1557,14 @@ sap.ui.require([
 
 	//*****************************************************************************************
 	QUnit.test("cancelChanges: unused group", function (assert) {
-		_Requestor.create("/Service/").cancelChanges("unusedGroupId");
+		_Requestor.create("/Service/", oModelInterface).cancelChanges("unusedGroupId");
 	});
 
 	//*****************************************************************************************
 	QUnit.test("removePatch", function (assert) {
-		var fnCancel = sinon.spy(),
+		var fnCancel = this.spy(),
 			oPromise,
-			oRequestor = _Requestor.create("/Service/"),
+			oRequestor = _Requestor.create("/Service/", oModelInterface),
 			oTestPromise;
 
 		oPromise = oRequestor.request("PATCH", "Products('0')", "groupId", {}, {Name : "foo"},
@@ -1453,10 +1586,10 @@ sap.ui.require([
 
 	//*****************************************************************************************
 	QUnit.test("removePatch: various requests", function (assert) {
-		var fnCancel = sinon.spy(),
+		var fnCancel = this.spy(),
 			oPromise,
 			aPromises,
-			oRequestor = _Requestor.create("/Service/");
+			oRequestor = _Requestor.create("/Service/", oModelInterface);
 
 		function unexpected () {
 			assert.ok(false);
@@ -1477,8 +1610,8 @@ sap.ui.require([
 			oRequestor.request("GET", "Employees", "groupId")
 		];
 
-		this.mock(oRequestor).expects("request")
-			.withExactArgs("POST", "$batch", undefined, {"Accept" : "multipart/mixed"}, [
+		this.mock(oRequestor).expects("sendBatch")
+			.withExactArgs([
 				sinon.match({
 					method : "PATCH",
 					url : "Products('0')",
@@ -1488,10 +1621,10 @@ sap.ui.require([
 					method : "GET",
 					url : "Employees"
 				})
-			]).returns(Promise.resolve([
+			]).resolves([
 				{responseText : "{}"},
 				{responseText : "{}"}
-			]));
+			]);
 
 		// code under test
 		oRequestor.removePatch(oPromise);
@@ -1505,12 +1638,11 @@ sap.ui.require([
 	//*****************************************************************************************
 	QUnit.test("removePatch after submitBatch", function (assert) {
 		var oPromise,
-			oRequestor = _Requestor.create("/Service/");
+			oRequestor = _Requestor.create("/Service/", oModelInterface);
 
 		oPromise = oRequestor.request("PATCH", "Products('0')", "groupId", {}, {Name : "bar"});
 
-		this.mock(oRequestor).expects("request").withArgs("POST", "$batch")
-			.returns(Promise.resolve([{}]));
+		this.mock(oRequestor).expects("sendBatch").resolves([{}]); // arguments don't matter
 
 		oRequestor.submitBatch("groupId");
 
@@ -1523,12 +1655,12 @@ sap.ui.require([
 	//*****************************************************************************************
 	QUnit.test("removePost", function (assert) {
 		var oBody = {},
-			fnCancel1 = sinon.spy(),
-			fnCancel2 = sinon.spy(),
-			oRequestor = _Requestor.create("/Service/"),
+			fnCancel1 = this.spy(),
+			fnCancel2 = this.spy(),
+			oRequestor = _Requestor.create("/Service/", oModelInterface),
 			oTestPromise;
 
-		sinon.spy(oRequestor, "cancelChangesByFilter");
+		this.spy(oRequestor, "cancelChangesByFilter");
 		oTestPromise = Promise.all([
 			oRequestor.request("POST", "Products", "groupId", {}, oBody, undefined, fnCancel1)
 				.then(function () {
@@ -1545,14 +1677,14 @@ sap.ui.require([
 
 		assert.ok(oRequestor.cancelChangesByFilter.calledWithExactly(sinon.match.func, "groupId"));
 
-		this.mock(oRequestor).expects("request")
-			.withExactArgs("POST", "$batch", undefined, {"Accept" : "multipart/mixed"}, [
+		this.mock(oRequestor).expects("sendBatch")
+			.withExactArgs([
 				sinon.match({
 					method : "POST",
 					url : "Products",
 					body : {Name : "bar"}
 				})
-			]).returns(Promise.resolve([{}]));
+			]).resolves([{}]);
 
 		// code under test
 		oRequestor.submitBatch("groupId");
@@ -1565,8 +1697,8 @@ sap.ui.require([
 	//*****************************************************************************************
 	QUnit.test("removePost with only one POST", function (assert) {
 		var oBody = {},
-			fnCancel = sinon.spy(),
-			oRequestor = _Requestor.create("/Service/"),
+			fnCancel = this.spy(),
+			oRequestor = _Requestor.create("/Service/", oModelInterface),
 			oTestPromise;
 
 		oTestPromise = oRequestor.request("POST", "Products", "groupId", {}, oBody,
@@ -1590,12 +1722,11 @@ sap.ui.require([
 	//*****************************************************************************************
 	QUnit.test("removePost after submitBatch", function (assert) {
 		var oPayload = {},
-			oRequestor = _Requestor.create("/Service/");
+			oRequestor = _Requestor.create("/Service/", oModelInterface);
 
 		oRequestor.request("POST", "Products", "groupId", {}, oPayload);
 
-		this.mock(oRequestor).expects("request").withArgs("POST", "$batch")
-			.returns(Promise.resolve([{}]));
+		this.mock(oRequestor).expects("sendBatch").resolves([{}]); // arguments don't matter
 
 		oRequestor.submitBatch("groupId");
 
@@ -1606,10 +1737,37 @@ sap.ui.require([
 	});
 
 	//*****************************************************************************************
+	QUnit.test("isChangeSetOptional", function (assert) {
+		var oRequestor = _Requestor.create("/");
+
+		assert.strictEqual(oRequestor.isChangeSetOptional(), true);
+	});
+
+	//*****************************************************************************************
+	QUnit.test("submitBatch: unwrap single change", function (assert) {
+		var oRequestor = _Requestor.create("/Service/", oModelInterface),
+			oRequestorMock = this.mock(oRequestor);
+
+		oRequestor.request("POST", "Products", "groupId", {}, {Name : "bar"});
+		oRequestorMock.expects("isChangeSetOptional").withExactArgs().returns(true);
+		oRequestorMock.expects("sendBatch")
+			.withExactArgs([
+				sinon.match({
+					method : "POST",
+					url : "Products",
+					body : {Name : "bar"}
+				})
+			]).resolves([{}]);
+
+		// code under test
+		return oRequestor.submitBatch("groupId");
+	});
+
+	//*****************************************************************************************
 	QUnit.test("relocate", function (assert) {
 		var oBody1 = {},
 			oBody2 = {},
-			fnCancel = sinon.spy(),
+			fnCancel = this.spy(),
 			oExpectedHeader = {
 				"Accept" : "application/json;odata.metadata=minimal;IEEE754Compatible=true",
 				"Content-Type" : "application/json;charset=UTF-8;IEEE754Compatible=true",
@@ -1619,9 +1777,9 @@ sap.ui.require([
 			oCreatePromise1,
 			oCreatePromise2,
 			oError = new Error("Post failed"),
-			oRequestor = _Requestor.create("/Service/"),
+			oRequestor = _Requestor.create("/Service/", oModelInterface),
 			oRequestorMock = this.mock(oRequestor),
-			fnSubmit = sinon.spy();
+			fnSubmit = this.spy();
 
 		oCreatePromise1 = oRequestor.request("POST", "Employees", "$parked.$auto", oHeaders, oBody1,
 			fnSubmit, fnCancel);
@@ -1641,7 +1799,7 @@ sap.ui.require([
 		oRequestorMock.expects("request")
 			.withExactArgs("POST", "Employees", "$auto", oExpectedHeader, oBody2, fnSubmit,
 				fnCancel)
-			.returns(Promise.resolve());
+			.resolves();
 
 		// code under test
 		oRequestor.relocate("$parked.$auto", oBody2, "$auto");
@@ -1653,7 +1811,7 @@ sap.ui.require([
 			oRequestorMock.expects("request")
 				.withExactArgs("POST", "Employees", "$auto", oExpectedHeader, oBody1, fnSubmit,
 					fnCancel)
-				.returns(Promise.reject(oError));
+				.rejects(oError);
 
 			// code under test
 			oRequestor.relocate("$parked.$auto", oBody1, "$auto");
@@ -1727,14 +1885,21 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	QUnit.test("doFetchV4Response (V4)", function (assert) {
+	QUnit.test("doConvertResponse (V4)", function (assert) {
 		var oPayload = {},
 			oRequestor = _Requestor.create("/");
 
 		// code under test
-		return oRequestor.doFetchV4Response(oPayload).then(function (oConvertedPayload) {
-			assert.strictEqual(oConvertedPayload, oPayload);
-		});
+		assert.strictEqual(oRequestor.doConvertResponse(oPayload), oPayload);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("convertResourcePath (V4)", function (assert) {
+		var sResourcePath = {},
+			oRequestor = _Requestor.create("/");
+
+		// code under test
+		assert.strictEqual(oRequestor.convertResourcePath(sResourcePath), sResourcePath);
 	});
 
 	//*********************************************************************************************
@@ -1745,12 +1910,12 @@ sap.ui.require([
 		this.mock(oRequestor).expects("convertExpand")
 			.withExactArgs(sinon.match.same(oExpand), undefined).returns("expand");
 
-		assert.deepEqual(oRequestor.convertQueryOptions({
+		assert.deepEqual(oRequestor.convertQueryOptions("/Foo", {
 			foo : "bar",
 			$apply : "filter(Price gt 100)",
 			$count : "true",
 			$expand : oExpand,
-			$filter : "BuyerName eq 'SAP'",
+			$filter : "SO_2_BP/CompanyName eq 'SAP'",
 			$foo : "bar", // to show that any system query option is accepted
 			$levels : "5",
 			$orderby : "GrossAmount asc",
@@ -1761,7 +1926,7 @@ sap.ui.require([
 			$apply : "filter(Price gt 100)",
 			$count : "true",
 			$expand : "expand",
-			$filter : "BuyerName eq 'SAP'",
+			$filter : "SO_2_BP/CompanyName eq 'SAP'",
 			$foo : "bar",
 			$levels : "5",
 			$orderby : "GrossAmount asc",
@@ -1769,13 +1934,13 @@ sap.ui.require([
 			$select : "select1,select2"
 		});
 
-		assert.deepEqual(oRequestor.convertQueryOptions({
+		assert.deepEqual(oRequestor.convertQueryOptions("/Foo", {
 			foo : "bar",
 			"sap-client" : "111",
 			$apply : "filter(Price gt 100)",
 			$count : true,
 			$expand : oExpand,
-			$filter : "BuyerName eq 'SAP'",
+			$filter : "SO_2_BP/CompanyName eq 'SAP'",
 			$orderby : "GrossAmount asc",
 			$search : "EUR",
 			$select : ["select1", "select2"]
@@ -1784,13 +1949,13 @@ sap.ui.require([
 			"sap-client" : "111"
 		});
 
-		assert.deepEqual(oRequestor.convertQueryOptions({
+		assert.deepEqual(oRequestor.convertQueryOptions("/Foo", {
 			$select : "singleSelect"
 		}), {
 			$select : "singleSelect"
 		});
 
-		assert.strictEqual(oRequestor.convertQueryOptions(undefined), undefined);
+		assert.strictEqual(oRequestor.convertQueryOptions("/Foo", undefined), undefined);
 	});
 
 	//*********************************************************************************************
@@ -1834,22 +1999,26 @@ sap.ui.require([
 	[true, false].forEach(function (bSortExpandSelect, i) {
 		QUnit.test("buildQueryString, " + i, function (assert) {
 			var oConvertedQueryParams = {},
+				sMetaPath = "/Foo",
 				oQueryParams = {},
 				oRequestor = _Requestor.create("/~/"),
 				oRequestorMock = this.mock(oRequestor);
 
 			oRequestorMock.expects("convertQueryOptions")
-				.withExactArgs(undefined, undefined, undefined).returns(undefined);
+				.withExactArgs(sMetaPath, undefined, undefined, undefined).returns(undefined);
 
-			assert.strictEqual(oRequestor.buildQueryString(), "");
+			// code under test
+			assert.strictEqual(oRequestor.buildQueryString(sMetaPath), "");
 
 			oRequestorMock.expects("convertQueryOptions")
-				.withExactArgs(sinon.match.same(oQueryParams), true, bSortExpandSelect)
+				.withExactArgs(sMetaPath, sinon.match.same(oQueryParams), true, bSortExpandSelect)
 				.returns(oConvertedQueryParams);
 			this.mock(_Helper).expects("buildQuery")
 				.withExactArgs(sinon.match.same(oConvertedQueryParams)).returns("?query");
 
-			assert.strictEqual(oRequestor.buildQueryString(oQueryParams, true, bSortExpandSelect),
+			// code under test
+			assert.strictEqual(
+				oRequestor.buildQueryString(sMetaPath, oQueryParams, true, bSortExpandSelect),
 				"?query");
 		});
 	});
@@ -1907,7 +2076,7 @@ sap.ui.require([
 			var oRequestor = _Requestor.create("/~/");
 
 			assert.strictEqual(
-				oRequestor.buildQueryString(oFixture.o, undefined, true), "?" + oFixture.s,
+				oRequestor.buildQueryString("/Foo", oFixture.o, undefined, true), "?" + oFixture.s,
 				oFixture.s);
 		});
 	});
@@ -1933,116 +2102,104 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	[{
-		sKeyPredicate : "('42')",
-		oEntityInstance : {"ID" : "42"},
-		oEntityType : {
-			"$Key" : ["ID"],
-			"ID" : {
-				"$Type" : "Edm.String"
-			}
-		}
-	}, {
-		sKeyPredicate : "('Walter%22s%20Win''s')",
-		oEntityInstance : {"ID" : "Walter\"s Win's"},
-		oEntityType : {
-			"$Key" : ["ID"],
-			"ID" : {
-				"$Type" : "Edm.String"
-			}
-		}
-	}, {
-		sKeyPredicate : "(Sector='DevOps',ID='42')",
-		oEntityInstance : {"ID" : "42", "Sector" : "DevOps"},
-		oEntityType : {
-			"$Key" : ["Sector", "ID"],
-			"Sector" : {
-				"$Type" : "Edm.String"
-			},
-			"ID" : {
-				"$Type" : "Edm.String"
-			}
-		}
-	}, {
-		sKeyPredicate : "(Bar=42,Fo%3Do='Walter%22s%20Win''s')",
-		oEntityInstance : {
-			"Bar" : 42,
-			"Fo=o" : "Walter\"s Win's"
-		},
-		oEntityType : {
-			"$Key" : ["Bar", "Fo=o"],
-			"Bar" : {
-				"$Type" : "Edm.Int16"
-			},
-			"Fo=o" : {
-				"$Type" : "Edm.String"
-			}
-		}
-	}].forEach(function (oFixture) {
-		QUnit.test("getKeyPredicate: " + oFixture.sKeyPredicate, function (assert) {
-			var sProperty,
-				oRequestor = _Requestor.create("/");
+	QUnit.test("ready()", function (assert) {
+		var oRequestor = _Requestor.create("/");
 
-			this.spy(oRequestor, "formatPropertyAsLiteral");
-
-			assert.strictEqual(
-				oRequestor.getKeyPredicate(oFixture.oEntityType, oFixture.oEntityInstance),
-				oFixture.sKeyPredicate);
-
-			// check that formatPropertyAsLiteral() is called for each property
-			for (sProperty in oFixture.oEntityType) {
-				if (sProperty[0] !== "$") {
-					assert.ok(
-						oRequestor.formatPropertyAsLiteral.calledWithExactly(
-							sinon.match.same(oFixture.oEntityInstance[sProperty]),
-							sinon.match.same(oFixture.oEntityType[sProperty])),
-						oRequestor.formatPropertyAsLiteral.printf(
-							"_Helper.formatLiteral('" + sProperty + "',...) %C"));
-				}
-			}
-		});
+		assert.strictEqual(oRequestor.ready().getResult(), undefined);
 	});
-	//TODO handle keys with aliases!
+
+	//*********************************************************************************************
+	QUnit.test("fetchTypeForPath", function (assert) {
+		var oPromise = {},
+			oRequestor = _Requestor.create("/", oModelInterface);
+
+		this.mock(oModelInterface).expects("fnFetchMetadata")
+			.withExactArgs("/EMPLOYEES/EMPLOYEE_2_TEAM/").returns(oPromise);
+
+		// code under test
+		assert.strictEqual(oRequestor.fetchTypeForPath("/EMPLOYEES/EMPLOYEE_2_TEAM"), oPromise);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("fetchTypeForPath, bAsName=true", function (assert) {
+		var oPromise = {},
+			oRequestor = _Requestor.create("/", oModelInterface);
+
+		this.mock(oModelInterface).expects("fnFetchMetadata")
+			.withExactArgs("/EMPLOYEES/EMPLOYEE_2_TEAM/$Type").returns(oPromise);
+
+		// code under test
+		assert.strictEqual(oRequestor.fetchTypeForPath("/EMPLOYEES/EMPLOYEE_2_TEAM", true),
+			oPromise);
+	});
 
 	//*********************************************************************************************
 	[{
-		sDescription : "one key property",
-		oEntityInstance : {},
-		oEntityType : {
-			"$Key" : ["ID"],
-			"ID" : {
-				"$Type" : "Edm.String"
-			}
-		}
+		iCallCount : 1,
+		mHeaders : { "OData-Version" : "4.0" }
 	}, {
-		sDescription : "multiple key properties",
-		oEntityInstance : {"Sector" : "DevOps"},
-		oEntityType : {
-			"$Key" : ["Sector", "ID"],
-			"Sector" : {
-				"$Type" : "Edm.String"
-			},
-			"ID" : {
-				"$Type" : "Edm.String"
-			}
-		}
-	}].forEach(function (oFixture) {
-		QUnit.test("getKeyPredicate: missing key, " + oFixture.sDescription, function (assert) {
-			var oRequestor = _Requestor.create("/");
+		iCallCount : 2,
+		mHeaders : {}
+	}].forEach(function (oFixture, i) {
+		QUnit.test("doCheckVersionHeader, success cases - " + i, function (assert) {
+			var oRequestor = _Requestor.create("/"),
+				fnGetHeader = this.spy(function (sHeaderKey) {
+					return oFixture.mHeaders[sHeaderKey];
+				});
 
-			assert.strictEqual(
-				oRequestor.getKeyPredicate(oFixture.oEntityType, oFixture.oEntityInstance),
-				undefined);
+			// code under test
+			oRequestor.doCheckVersionHeader(fnGetHeader, "Foo('42')/Bar", true);
+
+			assert.strictEqual(fnGetHeader.calledWithExactly("OData-Version"), true);
+			if (oFixture.iCallCount === 2) {
+				assert.strictEqual(fnGetHeader.calledWithExactly("DataServiceVersion"), true);
+			}
+			assert.strictEqual(fnGetHeader.callCount, oFixture.iCallCount);
+		});
+	});
+
+	//*********************************************************************************************
+	[{
+		iCallCount : 1,
+		sError : "value 'foo' in response for /Foo('42')/Bar",
+		mHeaders : { "OData-Version" : "foo" }
+	}, {
+		iCallCount : 2,
+		sError : "value 'undefined' in response for /Foo('42')/Bar",
+		mHeaders : {}
+	}, {
+		iCallCount : 2,
+		sError : "'DataServiceVersion' header with value 'baz' in response for /Foo('42')/Bar",
+		mHeaders : { "DataServiceVersion" : "baz" }
+	}].forEach(function (oFixture, i) {
+		QUnit.test("doCheckVersionHeader, error cases - " + i, function (assert) {
+			var oRequestor = _Requestor.create("/"),
+				fnGetHeader = this.spy(function (sHeaderKey) {
+					return oFixture.mHeaders[sHeaderKey];
+				});
+
+			assert.throws(function () {
+				// code under test
+				oRequestor.doCheckVersionHeader(fnGetHeader, "Foo('42')/Bar");
+			}, new Error("Expected 'OData-Version' header with value '4.0' but received "
+				+ oFixture.sError));
+
+			assert.strictEqual(fnGetHeader.calledWithExactly("OData-Version"), true);
+			if (oFixture.iCallCount === 2) {
+				assert.strictEqual(fnGetHeader.calledWithExactly("DataServiceVersion"), true);
+			}
+			assert.strictEqual(fnGetHeader.callCount, oFixture.iCallCount);
 		});
 	});
 
 	//*********************************************************************************************
 	if (TestUtils.isRealOData()) {
 		QUnit.test("request(...)/submitBatch (realOData) success", function (assert) {
-			var oRequestor = _Requestor.create(TestUtils.proxy(sServiceUrl)),
+			var oRequestor = _Requestor.create(TestUtils.proxy(sServiceUrl), oModelInterface),
 				sResourcePath = "TEAMS('TEAM_01')";
 
 			function assertResult(oPayload) {
+				delete oPayload["@odata.metadataEtag"];
 				assert.deepEqual(oPayload, {
 					"@odata.context" : "$metadata#TEAMS/$entity",
 					"Team_Id" : "TEAM_01",
@@ -2066,9 +2223,10 @@ sap.ui.require([
 
 		//*****************************************************************************************
 		QUnit.test("request(...)/submitBatch (realOData) fail", function (assert) {
-			var oRequestor = _Requestor.create(TestUtils.proxy(sServiceUrl));
+			var oRequestor = _Requestor.create(TestUtils.proxy(sServiceUrl), oModelInterface);
 
 			oRequestor.request("GET", "TEAMS('TEAM_01')", "group").then(function (oResult) {
+				delete oResult["@odata.metadataEtag"];
 				assert.deepEqual(oResult, {
 					"@odata.context" : "$metadata#TEAMS/$entity",
 					"Team_Id" : "TEAM_01",
@@ -2089,7 +2247,6 @@ sap.ui.require([
 				assert.strictEqual(typeof oError.error, "object");
 				assert.strictEqual(typeof oError.message, "string");
 				assert.strictEqual(oError.status, 404);
-				assert.strictEqual(oError.statusText, "Not Found");
 			});
 
 			return oRequestor.submitBatch("group").then(function (oResult) {
@@ -2100,7 +2257,7 @@ sap.ui.require([
 		//*****************************************************************************************
 		QUnit.test("request(ProductList)/submitBatch (realOData) patch", function (assert) {
 			var oBody = {Name : "modified by QUnit test"},
-				oRequestor = _Requestor.create(TestUtils.proxy(sSampleServiceUrl)),
+				oRequestor = _Requestor.create(TestUtils.proxy(sSampleServiceUrl), oModelInterface),
 				sResourcePath = "ProductList('HT-1001')";
 
 			return Promise.all([
@@ -2115,7 +2272,7 @@ sap.ui.require([
 		//*****************************************************************************************
 		QUnit.test("submitBatch (real OData): error in change set", function (assert) {
 			var oCommonError,
-				oRequestor = _Requestor.create(TestUtils.proxy(sSampleServiceUrl));
+				oRequestor = _Requestor.create(TestUtils.proxy(sSampleServiceUrl), oModelInterface);
 
 			function onError(oError) {
 				if (oCommonError) {
@@ -2143,6 +2300,105 @@ sap.ui.require([
 			]);
 		});
 	}
+
+	//*********************************************************************************************
+	QUnit.test("getPathAndAddQueryOptions: Action", function (assert) {
+		var oOperationMetadata = {
+				$kind : "Action",
+				"$Parameter" : [{
+					"$Name" : "Foo"
+				}, {
+					"$Name" : "ID"
+				}]
+			},
+			mParameters = {"ID" : "1", "Foo" : 42, "n/a" : NaN},
+			oRequestor = _Requestor.create("/");
+
+		// code under test
+		assert.strictEqual(
+			oRequestor.getPathAndAddQueryOptions("/OperationImport(...)", oOperationMetadata,
+				mParameters),
+			"OperationImport");
+
+		assert.deepEqual(mParameters, {"ID" : "1", "Foo" : 42}, "n/a is removed");
+
+		// code under test
+		assert.strictEqual(
+			oRequestor.getPathAndAddQueryOptions("/Entity('0815')/bound.Operation(...)",
+				{$kind : "Action"}, mParameters),
+			"Entity('0815')/bound.Operation");
+
+		assert.deepEqual(mParameters, {}, "no parameters accepted");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("getPathAndAddQueryOptions: Function", function (assert) {
+		var oOperationMetadata = {
+				$kind : "Function",
+				$Parameter : [{
+					$Name : "føø",
+					$Type : "Edm.String"
+				}, {
+					$Name : "p2",
+					$Type : "Edm.Int16"
+				}, { // unused collection parameter must not lead to an error
+					$Name : "p3",
+					//$Nullable : true,
+					$IsCollection : true
+				}]
+			},
+			oRequestor = _Requestor.create("/"),
+			oRequestorMock = this.mock(oRequestor);
+
+		oRequestorMock.expects("formatPropertyAsLiteral")
+			.withExactArgs("bãr'1", oOperationMetadata.$Parameter[0]).returns("'bãr''1'");
+		oRequestorMock.expects("formatPropertyAsLiteral")
+			.withExactArgs(42,  oOperationMetadata.$Parameter[1]).returns("42");
+
+		assert.strictEqual(
+			// code under test
+			oRequestor.getPathAndAddQueryOptions("/some.Function(...)", oOperationMetadata,
+				{"føø" : "bãr'1", "p2" : 42, "n/a" : NaN}),
+			"some.Function(f%C3%B8%C3%B8='b%C3%A3r''1',p2=42)");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("getPathAndAddQueryOptions: Function w/o parameters", function (assert) {
+		var oOperationMetadata = {$kind : "Function"},
+			oRequestor = _Requestor.create("/");
+
+		this.mock(oRequestor).expects("formatPropertyAsLiteral").never();
+
+		assert.strictEqual(
+			// code under test
+			oRequestor.getPathAndAddQueryOptions("/some.Function(...)", oOperationMetadata, {}),
+			"some.Function()");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("getPathAndAddQueryOptions: Function w/ collection parameter", function (assert) {
+		var oOperationMetadata = {
+				$kind : "Function",
+				$Parameter : [{$Name : "foo", $IsCollection : true}]
+			},
+			oRequestor = _Requestor.create("/");
+
+		this.mock(oRequestor).expects("formatPropertyAsLiteral").never();
+
+		assert.throws(function () {
+			// code under test
+			oRequestor.getPathAndAddQueryOptions("/some.Function(...)", oOperationMetadata,
+				{"foo" : [42]});
+		}, new Error("Unsupported collection-valued parameter: foo"));
+	});
+	//TODO what about actions & collections?
+
+	//*****************************************************************************************
+	QUnit.test("isActionBodyOptional", function (assert) {
+		var oRequestor = _Requestor.create("/");
+
+		assert.strictEqual(oRequestor.isActionBodyOptional(), false);
+	});
 });
 // TODO: continue-on-error? -> flag on model
 // TODO: cancelChanges: what about existing GET requests in deferred queue (delete or not)?

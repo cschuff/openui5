@@ -3,7 +3,29 @@
 */
 
 // Provides control sap.ui.layout.ResponsiveSplitter.
-sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Control", "./ResponsiveSplitterUtilities", "./ResponsiveSplitterPage", "./PaneContainer", "./SplitPane", "sap/ui/core/delegate/ItemNavigation"], function (jQuery, library, Control, RSUtil, ResponsiveSplitterPage, PaneContainer, SplitPane, ItemNavigation) {
+sap.ui.define([
+    "jquery.sap.global",
+    "./library",
+    "sap/ui/core/Control",
+    "./ResponsiveSplitterUtilities",
+    "./ResponsiveSplitterPage",
+    "./PaneContainer",
+    "./SplitPane",
+    "sap/ui/core/delegate/ItemNavigation",
+    "sap/ui/core/ResizeHandler",
+    "./ResponsiveSplitterRenderer"
+], function(
+    jQuery,
+	library,
+	Control,
+	RSUtil,
+	ResponsiveSplitterPage,
+	PaneContainer,
+	SplitPane,
+	ItemNavigation,
+	ResizeHandler,
+	ResponsiveSplitterRenderer
+) {
 	"use strict";
 
 	/**
@@ -37,6 +59,8 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Control", "./Respo
 	 * <li>On touch-enabled devices, the splitters show explicit handles with larger touch areas.</li>
 	 * <li>Double-clicking on a splitter will collapse or expand it back to its original position.</li>
 	 * </ul>
+	 *
+	 * <b>Note:</b> We don't recommend dynamically inserting/removing panes into/from the PaneContainer since this might lead to inconsistent layout. If it is necessary, you need to ensure the sum of all sizes of the SplitPanes doesn't exceed the width of the PaneContainer.
 	 * @extends sap.ui.core.Control
 	 *
 	 * @author SAP SE
@@ -46,6 +70,7 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Control", "./Respo
 	 * @public
 	 * @since 1.38
 	 * @alias sap.ui.layout.ResponsiveSplitter
+	 * @see {@link fiori:https://experience.sap.com/fiori-design-web/responsive-splitter/ Responsive Splitter}
 	 */
 	var ResponsiveSplitter = Control.extend("sap.ui.layout.ResponsiveSplitter", /** @lends sap.ui.layout.ResponsiveSplitter.prototype */ {
 		metadata: {
@@ -117,7 +142,7 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Control", "./Respo
 	};
 
 	ResponsiveSplitter.prototype.onAfterRendering = function () {
-		this._parentResizeHandler = sap.ui.core.ResizeHandler.register(this, this._onParentResize.bind(this));
+		this._parentResizeHandler = ResizeHandler.register(this, this._onParentResize.bind(this));
 		var oRootContainer = this.getRootPaneContainer();
 		if (oRootContainer) {
 			this._onParentResize();
@@ -335,7 +360,7 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Control", "./Respo
 	 */
 	ResponsiveSplitter.prototype._detachResizeHandler = function () {
 		if (this._parentResizeHandler) {
-			sap.ui.core.ResizeHandler.deregister(this._parentResizeHandler);
+			ResizeHandler.deregister(this._parentResizeHandler);
 			this._parentResizeHandler = null;
 		}
 	};
@@ -665,4 +690,4 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Control", "./Respo
 
 	return ResponsiveSplitter;
 
-}, /* bExport= */ true);
+});

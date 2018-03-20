@@ -26,10 +26,11 @@ sap.ui.define([
 	"./ODataContextBinding",
 	"./ODataListBinding",
 	"./ODataMetaModel",
-	"./ODataPropertyBinding"
+	"./ODataPropertyBinding",
+	"./SubmitMode"
 ], function (jQuery, Message, BindingMode, BaseContext, Model, OperationMode, URI,
 		_MetadataRequestor, _Requestor, _Parser, ODataContextBinding, ODataListBinding,
-		ODataMetaModel, ODataPropertyBinding) {
+		ODataMetaModel, ODataPropertyBinding, SubmitMode) {
 
 	"use strict";
 
@@ -42,7 +43,9 @@ sap.ui.define([
 		mSupportedParameters = {
 			annotationURI : true,
 			autoExpandSelect : true,
+			earlyRequests : true,
 			groupId : true,
+			groupProperties : true,
 			odataVersion : true,
 			operationMode : true,
 			serviceUrl : true,
@@ -73,10 +76,25 @@ sap.ui.define([
 	 *   options from the binding hierarchy.
 	 *   Note: Dynamic changes to the binding hierarchy are not supported.
 	 *   Supported since 1.47.0
+	 * @param {boolean} [mParameters.earlyRequests=false]
+	 *   Whether the following is requested at the earliest convenience:
+	 *   <ul>
+	 *   <li> root $metadata document and annotation files;
+	 *   <li> the security token.
+	 *   </ul>
+	 *   Note: The root $metadata document and annotation files are just requested but not yet
+	 *   converted from XML to JSON unless really needed.
+	 *   Supported since 1.53.0
+	 *   <b>BEWARE:</b> The default value may change to <code>true</code> in later releases.
 	 * @param {string} [mParameters.groupId="$auto"]
 	 *   Controls the model's use of batch requests: '$auto' bundles requests from the model in a
 	 *   batch request which is sent automatically before rendering; '$direct' sends requests
 	 *   directly without batch; other values result in an error
+	 * @param {object} [mParameters.groupProperties]
+	 *   Controls the use of batch requests for application groups. A map of application
+	 *   group IDs having an object with exactly one property <code>submit</code>. Valid values are
+	 *   'API', 'Auto', 'Direct' see {@link sap.ui.model.odata.v4.SubmitMode}.
+	 *   Supported since 1.51.0
 	 * @param {string} [mParameters.odataVersion="4.0"]
 	 *   The version of the OData service. Supported values are "2.0" and "4.0".
 	 * @param {sap.ui.model.odata.OperationMode} [mParameters.operationMode]
@@ -100,8 +118,8 @@ sap.ui.define([
 	 *   case data changes in one binding. Must be set to 'None' which means bindings are not
 	 *   synchronized at all; all other values are not supported and lead to an error.
 	 * @param {string} [mParameters.updateGroupId]
-	 *   The group ID that is used for update requests. If no update group ID is specified,
-	 *   <code>mParameters.groupId</code> is used. Valid update group IDs are <code>undefined</code>,
+	 *   The group ID that is used for update requests. If no update group ID is specified, <code>
+	 *   mParameters.groupId</code> is used. Valid update group IDs are <code>undefined</code>,
 	 *   '$auto', '$direct' or an application group ID, which is a non-empty string consisting of
 	 *   alphanumeric characters from the basic Latin alphabet, including the underscore.
 	 * @throws {Error} If an unsupported synchronization mode is given, if the given service root
@@ -137,7 +155,9 @@ sap.ui.define([
 			/** @lends sap.ui.model.odata.v4.ODataModel.prototype */
 			{
 				constructor : function (mParameters) {
-					var mHeaders = {
+					var sGroupId,
+						oGroupProperties,
+						mHeaders = {
 							"Accept-Language" : sap.ui.getCore().getConfiguration().getLanguageTag()
 						},
 						sODataVersion,
@@ -190,6 +210,21 @@ sap.ui.define([
 					this.checkGroupId(mParameters.updateGroupId, false,
 						"Invalid update group ID: ");
 					this.sUpdateGroupId = mParameters.updateGroupId || this.getGroupId();
+					this.mGroupProperties = {};
+					for (sGroupId in mParameters.groupProperties) {
+						that.checkGroupId(sGroupId, true);
+						oGroupProperties = mParameters.groupProperties[sGroupId];
+						if (typeof oGroupProperties !== "object"
+								|| Object.keys(oGroupProperties).length !== 1
+								|| !(oGroupProperties.submit in SubmitMode)) {
+							throw new Error("Group '" + sGroupId + "' has invalid properties: '"
+								+ oGroupProperties + "'");
+						}
+					}
+					this.mGroupProperties = jQuery.extend({
+							"$auto" : {submit : SubmitMode.Auto},
+							"$direct" : {submit : SubmitMode.Direct}
+						}, mParameters.groupProperties);
 					if (mParameters.autoExpandSelect !== undefined
 							&& typeof mParameters.autoExpandSelect !== "boolean") {
 						throw new Error("Value for autoExpandSelect must be true or false");
@@ -200,15 +235,22 @@ sap.ui.define([
 						_MetadataRequestor.create(mHeaders, sODataVersion, this.mUriParameters),
 						this.sServiceUrl + "$metadata", mParameters.annotationURI, this,
 						mParameters.supportReferences);
-					this.oRequestor = _Requestor.create(this.sServiceUrl, mHeaders,
-						this.mUriParameters,
-						this.oMetaModel.fetchEntityContainer.bind(this.oMetaModel),
-						function (sGroupId) {
-							if (sGroupId === "$auto") {
-								sap.ui.getCore().addPrerenderingTask(
-									that._submitBatch.bind(that, sGroupId));
+					this.oRequestor = _Requestor.create(this.sServiceUrl, {
+							fnFetchEntityContainer :
+								this.oMetaModel.fetchEntityContainer.bind(this.oMetaModel),
+							fnFetchMetadata : this.oMetaModel.fetchObject.bind(this.oMetaModel),
+							fnGetGroupProperty : this.getGroupProperty.bind(this),
+							fnOnCreateGroup : function (sGroupId) {
+								if (that.isAutoGroup(sGroupId)) {
+									sap.ui.getCore().addPrerenderingTask(
+										that._submitBatch.bind(that, sGroupId));
+								}
 							}
-						}, sODataVersion);
+						}, mHeaders, this.mUriParameters, sODataVersion);
+					if (mParameters.earlyRequests) {
+						this.oMetaModel.fetchEntityContainer(true);
+						this.initializeSecurityToken();
+					}
 
 					this.aAllBindings = [];
 					this.sDefaultBindingMode = BindingMode.TwoWay;
@@ -269,7 +311,7 @@ sap.ui.define([
 	 *   and "$$updateGroupId".
 	 *   Note: The binding creates its own data service request if it is absolute or if it has any
 	 *   parameters or if it is relative and has a context created via
-	 *   {@link ODataModel#createBindingContext}.
+	 *   {@link #createBindingContext}.
 	 *   The following OData query options are allowed:
 	 *   <ul>
 	 *   <li> All "5.2 Custom Query Options" except for those with a name starting with "sap-"
@@ -286,6 +328,9 @@ sap.ui.define([
 	 *   model's group ID is used, see {@link sap.ui.model.odata.v4.ODataModel#constructor}.
 	 *   Valid values are <code>undefined</code>, '$auto', '$direct' or application group IDs as
 	 *   specified in {@link #submitBatch}.
+	 * @param {boolean} [mParameters.$$ownRequest]
+	 *   Whether the binding always uses an own service request to read its data; only the value
+	 *   <code>true</code> is allowed.
 	 * @param {string} [mParameters.$$updateGroupId]
 	 *   The group ID to be used for <b>update</b> requests triggered by this binding;
 	 *   if not specified, either the parent binding's update group ID (if the binding is relative)
@@ -360,8 +405,8 @@ sap.ui.define([
 	 *   "OData Version 4.0 Part 2: URL Conventions" or the binding-specific parameters "$$groupId"
 	 *   and "$$updateGroupId".
 	 *   Note: The binding creates its own data service request if it is absolute or if it has any
-	 *   parameters or if it is relative and has a context created via
-	 *   {@link ODataModel#createBindingContext} or if it has sorters or filters.
+	 *   parameters or if it is relative and has a context created via {@link #createBindingContext}
+	 *   or if it has sorters or filters.
 	 *   The following OData query options are allowed:
 	 *   <ul>
 	 *   <li> All "5.2 Custom Query Options" except for those with a name starting with "sap-"
@@ -381,6 +426,9 @@ sap.ui.define([
 	 *   model's group ID is used, see {@link sap.ui.model.odata.v4.ODataModel#constructor}.
 	 *   Valid values are <code>undefined</code>, '$auto', '$direct' or application group IDs as
 	 *   specified in {@link #submitBatch}.
+	 * @param {boolean} [mParameters.$$ownRequest]
+	 *   Whether the binding always uses an own service request to read its data; only the value
+	 *   <code>true</code> is allowed.
 	 * @param {string} [mParameters.$$updateGroupId]
 	 *   The group ID to be used for <b>update</b> requests triggered by this binding;
 	 *   if not specified, either the parent binding's update group ID (if the binding is relative)
@@ -415,7 +463,7 @@ sap.ui.define([
 	 *   "OData Version 4.0 Part 2: URL Conventions" or the binding-specific parameter "$$groupId".
 	 *   Note: The binding creates its own data service request if it is absolute or if it has any
 	 *   parameters or if it is relative and has a context created via
-	 *   {@link ODataModel#createBindingContext}.
+	 *   {@link #createBindingContext}.
 	 *   All "5.2 Custom Query Options" are allowed except for those with a name starting with
 	 *   "sap-". All other query options lead to an error.
 	 *   Query options specified for the binding overwrite model query options.
@@ -460,6 +508,7 @@ sap.ui.define([
 	 * <li> '$$groupId' with allowed values as specified in {@link #checkGroupId}
 	 * <li> '$$updateGroupId' with allowed values as specified in {@link #checkGroupId}
 	 * <li> '$$operationMode' with value {@link sap.ui.model.odata.OperationMode.Server}
+	 * <li> '$$ownRequest' with value <code>true</code>
 	 * </ul>
 	 *
 	 * @param {object} mParameters
@@ -479,7 +528,7 @@ sap.ui.define([
 
 		if (mParameters) {
 			Object.keys(mParameters).forEach(function (sKey) {
-				var sValue = mParameters[sKey];
+				var vValue = mParameters[sKey];
 
 				if (sKey.indexOf("$$") !== 0) {
 					return;
@@ -488,16 +537,27 @@ sap.ui.define([
 					throw new Error("Unsupported binding parameter: " + sKey);
 				}
 
-				if (sKey === "$$groupId" || sKey === "$$updateGroupId") {
-					that.checkGroupId(sValue, false,
-						"Unsupported value for binding parameter '" + sKey + "': ");
-				} else if (sKey === "$$operationMode") {
-					if (sValue !== OperationMode.Server) {
-						throw new Error("Unsupported operation mode: " + sValue);
-					}
+				switch (sKey) {
+					case "$$groupId":
+					case "$$updateGroupId":
+						that.checkGroupId(vValue, false,
+							"Unsupported value for binding parameter '" + sKey + "': ");
+						break;
+					case "$$operationMode":
+						if (vValue !== OperationMode.Server) {
+							throw new Error("Unsupported operation mode: " + vValue);
+						}
+						break;
+					case "$$ownRequest":
+						if (vValue !== true) {
+							throw new Error("Unsupported value for binding parameter "
+								+ "'$$ownRequest': " + vValue);
+						}
+						break;
+					default:
+						throw new Error("Unknown binding-specific parameter: " + sKey);
 				}
-
-				mResult[sKey] = sValue;
+				mResult[sKey] = vValue;
 			});
 		}
 		return mResult;
@@ -506,7 +566,7 @@ sap.ui.define([
 	/**
 	 * Constructs a map of query options from the given binding parameters.
 	 * Parameters starting with '$$' indicate binding-specific parameters, which must not be part
-	 * of a back end query; they are ignored and not added to the map.
+	 * of a back-end query; they are ignored and not added to the map.
 	 * The following query options are disallowed:
 	 * <ul>
 	 * <li> System query options (key starts with "$"), unless
@@ -608,6 +668,28 @@ sap.ui.define([
 	};
 
 	/**
+	 * Checks whether the given group ID is a deferred application group, which is a non-empty
+	 * string consisting of alphanumeric characters from the basic Latin alphabet, including the
+	 * underscore and not having group property {@link sap.ui.model.odata.v4.SubmitMode.Auto}
+	 * or {@link sap.ui.model.odata.v4.SubmitMode.Direct}.
+	 *
+	 * @param {string} sGroupId
+	 *   The group ID
+	 * @throws {Error}
+	 *   For invalid deferred group IDs, or group IDs having group property
+	 *   {@link sap.ui.model.odata.v4.SubmitMode.Auto} or
+	 *   {@link sap.ui.model.odata.v4.SubmitMode.Direct}
+	 *
+	 * @private
+	 */
+	ODataModel.prototype.checkDeferredGroupId = function (sGroupId) {
+		this.checkGroupId(sGroupId, true, "Invalid deferred group ID: ");
+		if (this.isAutoGroup(sGroupId) || this.isDirectGroup(sGroupId)) {
+			throw new Error("Group ID is not deferred: " + sGroupId);
+		}
+	};
+
+	/**
 	 * Checks whether the given group ID is valid, which means it is either undefined, '$auto',
 	 * '$direct' or an application group ID, which is a non-empty string consisting of
 	 * alphanumeric characters from the basic Latin alphabet, including the underscore.
@@ -638,22 +720,32 @@ sap.ui.define([
 	 * Note: The parameters <code>mParameters</code>, <code>fnCallBack</code>, and
 	 * <code>bReload</code> from {@link sap.ui.model.Model#createBindingContext} are not supported.
 	 *
-	 * It is possible to create binding contexts pointing to metadata.  A '#' in the resolved path
-	 * splits it into two parts: The part before '#' is transformed into a metadata context (see
-	 * {@link sap.ui.model.odata.v4.ODataMetaModel#getMetaContext}). The part following '#' is then
-	 * interpreted relative to this metadata context, even if it starts with a '/'; a trailing '/'
-	 * is allowed here, see {@link sap.ui.model.odata.v4.ODataMetaModel#requestObject} for the
-	 * effect it has.
+	 * It is possible to create binding contexts pointing to metadata.  A '##' is recognized
+	 * as separator in the resolved path and splits it into two parts; note that '#' may also be
+	 * used as separator but is deprecated since 1.51.
+	 * The part before the separator is transformed into a metadata context (see
+	 * {@link sap.ui.model.odata.v4.ODataMetaModel#getMetaContext}). The part following the
+	 * separator is then interpreted relative to this metadata context, even if it starts with
+	 * a '/'; a trailing '/' is allowed here, see
+	 * {@link sap.ui.model.odata.v4.ODataMetaModel#requestObject} for the effect it has.
+	 *
+	 * A binding path may also point to an operation advertisement which is addressed with
+	 * '#<namespace>.<operation>' and is part of the data payload, not the metadata. The metadata
+	 * of an operation can be addressed via '##' as described above.
 	 *
 	 * Examples:
 	 * <ul>
-	 * <li><code>/Products('42')/Name#@com.sap.vocabularies.Common.v1.Label</code>
+	 * <li><code>/Products('42')/Name##@com.sap.vocabularies.Common.v1.Label</code>
 	 *   points to the "Label" annotation of the "Name" property of the entity set "Products".
-	 * <li><code>/#Products/Name@com.sap.vocabularies.Common.v1.Label</code> has no data path part
+	 * <li><code>/##Products/Name@com.sap.vocabularies.Common.v1.Label</code> has no data path part
 	 *   and thus starts at the metadata root. It also points to the "Label" annotation of the
 	 *   "Name" property of the entity set "Products".
-	 * <li><code>/Products#/</code>
+	 * <li><code>/Products##/</code>
 	 *   points to the entity type (note the trailing '/') of the entity set "Products".
+	 * <li><code>/EMPLOYEES('1')/##com.sap.Action</code>
+	 *   points to the metadata of an action bound to the entity set "EMPLOYEES".
+	 * <li><code>/EMPLOYEES('1')/#com.sap.Action</code>
+	 *   does not point to metadata, but to the action advertisement.
 	 * </ul>
 	 *
 	 * @param {string} sPath
@@ -677,6 +769,19 @@ sap.ui.define([
 			sResolvedPath,
 			iSeparator;
 
+		/**
+		 * Checks if the given meta path contains a dot in its first segment.
+		 *
+		 * @param {string} sMetaPath The meta path
+		 * @returns {boolean} Whether the given meta path contains a dot in its first segment
+		 */
+		function startsWithQualifiedName(sMetaPath) {
+			var iDotPos = sMetaPath.indexOf("."),
+				iSlashPos = sMetaPath.indexOf("/");
+
+			return iDotPos > 0 && (iSlashPos < 0 || iDotPos < iSlashPos);
+		}
+
 		if (arguments.length > 2) {
 			throw new Error("Only the parameters sPath and oContext are supported");
 		}
@@ -694,6 +799,12 @@ sap.ui.define([
 		if (iSeparator >= 0) {
 			sDataPath = sResolvedPath.slice(0, iSeparator);
 			sMetaPath = sResolvedPath.slice(iSeparator + 1);
+			if (sMetaPath[0] === "#") {
+				sMetaPath = sMetaPath.slice(1);
+			} else if (sDataPath.length > 1 && sMetaPath[0] !== "@"
+					&& startsWithQualifiedName(sMetaPath)) { // action advertisement
+				return new BaseContext(this, sResolvedPath);
+			}
 			if (sMetaPath[0] === "/") {
 				sMetaPath = "." + sMetaPath;
 			}
@@ -750,22 +861,18 @@ sap.ui.define([
 	 *
 	 * @param {sap.ui.model.Binding|sap.ui.model.Context} oParent
 	 *   The parent binding or context
-	 * @param {boolean} bSkipCreatedEntities
-	 *   Whether to skip bindings with a context that has been created by ODataListBinding#create
 	 * @returns {sap.ui.model.Binding[]}
 	 *   A list of all dependent bindings, never <code>null</code>
 	 *
 	 * @private
 	 */
-	ODataModel.prototype.getDependentBindings = function (oParent, bSkipCreatedEntities) {
+	ODataModel.prototype.getDependentBindings = function (oParent) {
 		return this.aAllBindings.filter(function (oBinding) {
 			var oContext = oBinding.getContext();
 
 			return oBinding.isRelative()
-				&& !(bSkipCreatedEntities && oContext && oContext.created && oContext.created())
 				&& (oContext === oParent
-						|| oContext && oContext.getBinding && oContext.getBinding() === oParent
-					);
+						|| oContext && oContext.getBinding && oContext.getBinding() === oParent);
 		});
 	};
 
@@ -781,6 +888,31 @@ sap.ui.define([
 	 */
 	ODataModel.prototype.getGroupId = function () {
 		return this.sGroupId;
+	};
+
+	/**
+	 * Returns a group property value.
+	 *
+	 * @param {string} sGroupId
+	 *   The group ID
+	 * @param {string} sPropertyName
+	 *   The group property in question
+	 * @returns {string}
+	 *   The group property value
+	 * @throws {Error} If the name of the group property is not 'submit'
+	 *
+	 * @private
+	 * @see sap.ui.model.odata.v4.ODataModel#constructor
+	 */
+	ODataModel.prototype.getGroupProperty = function (sGroupId, sPropertyName) {
+		switch (sPropertyName) {
+			case "submit":
+				return this.mGroupProperties[sGroupId]
+					? this.mGroupProperties[sGroupId].submit
+					: SubmitMode.API;
+			default:
+				throw new Error("Unsupported group property: '" + sPropertyName + "'");
+		}
 	};
 
 	/**
@@ -883,6 +1015,15 @@ sap.ui.define([
 	};
 
 	/**
+	 * Initializes the security token used by this model's requestor.
+	 *
+	 * @private
+	 */
+	ODataModel.prototype.initializeSecurityToken = function () {
+		this.oRequestor.refreshSecurityToken();
+	};
+
+	/**
 	 * Method not supported
 	 *
 	 * @throws {Error}
@@ -892,6 +1033,35 @@ sap.ui.define([
 	 */
 	ODataModel.prototype.isList = function () {
 		throw new Error("Unsupported operation: v4.ODataModel#isList");
+	};
+
+	/**
+	 * Determines whether the given group ID uses mode {@link sap.ui.model.odata.v4.SubmitMode.Auto}
+	 *
+	 * @param {string} sGroupId
+	 *   The group ID
+	 * @returns {boolean|undefined} Whether it is an auto group
+	 *
+	 * @private
+	 */
+	ODataModel.prototype.isAutoGroup = function (sGroupId) {
+		return this.mGroupProperties[sGroupId]
+			&& this.mGroupProperties[sGroupId].submit === SubmitMode.Auto;
+	};
+
+	/**
+	 * Determines whether the given group ID uses mode
+	 * {@link sap.ui.model.odata.v4.SubmitMode.Direct}
+	 *
+	 * @param {string} sGroupId
+	 *   The group ID
+	 * @returns {boolean|undefined} Whether it is a direct group
+	 *
+	 * @private
+	 */
+	ODataModel.prototype.isDirectGroup = function (sGroupId) {
+		return this.mGroupProperties[sGroupId]
+			&& this.mGroupProperties[sGroupId].submit === SubmitMode.Direct;
 	};
 
 	/**
@@ -934,8 +1104,6 @@ sap.ui.define([
 	/**
 	 * Reports a technical error by adding a message to the MessageManager and logging the error to
 	 * the console. Takes care that the error is only added once to the MessageManager.
-	 * Errors caused by cancellation of backend requests are not reported but just logged to the
-	 * console with level DEBUG.
 	 *
 	 * @param {string} sLogMessage
 	 *   The message to write to the console log
@@ -943,12 +1111,22 @@ sap.ui.define([
 	 *   The name of the class reporting the error
 	 * @param {Error} oError
 	 *   The error
+	 * @param {boolean|string} [oError.canceled]
+	 *   A boolean value indicates whether the error is not reported but just logged to the
+	 *   console with level DEBUG; example: errors caused by cancellation of backend requests.
+	 *   For the string value "noDebugLog", the method does nothing; example: errors caused by
+	 *   suspended bindings.
 	 *
 	 * @private
 	 */
 	ODataModel.prototype.reportError = function (sLogMessage, sReportingClassName, oError) {
-		var sDetails = oError.stack || oError.message;
+		var sDetails;
 
+		if (oError.canceled === "noDebugLog") {
+			return;
+		}
+
+		sDetails = oError.stack || oError.message;
 		if (sDetails.indexOf(oError.message) < 0) {
 			sDetails = oError.message + "\n" + oError.stack;
 		}
@@ -1010,8 +1188,10 @@ sap.ui.define([
 	 *   <code>undefined</code>, the model's <code>updateGroupId</code> is used. Note that the
 	 *   default <code>updateGroupId</code> is '$auto', which is invalid here.
 	 * @throws {Error}
-	 *   If the given group ID is not an application group ID or if change requests for the given
-	 *   group ID are running.
+	 *   If the given group ID is not an application group ID or has
+	 *   {@link sap.ui.model.odata.v4.SubmitMode.Auto} or
+	 *   {@link sap.ui.model.odata.v4.SubmitMode.Direct} or if change requests for the given group
+	 *   ID are running.
 	 *
 	 * @public
 	 * @see sap.ui.model.odata.v4.ODataModel#constructor.
@@ -1019,7 +1199,7 @@ sap.ui.define([
 	 */
 	ODataModel.prototype.resetChanges = function (sGroupId) {
 		sGroupId = sGroupId || this.sUpdateGroupId;
-		this.checkGroupId(sGroupId, true);
+		this.checkDeferredGroupId(sGroupId);
 
 		this.oRequestor.cancelChanges(sGroupId);
 		this.aAllBindings.forEach(function (oBinding) {
@@ -1038,7 +1218,7 @@ sap.ui.define([
 	 * {@link sap.ui.model.odata.v4.ODataMetaModel#requestObject} for the effect of a trailing
 	 * slash.
 	 *
-	 * @param {string} sPath
+	 * @param {string} [sPath=""]
 	 *   A relative or absolute path within the data model
 	 * @param {sap.ui.model.Context} [oContext]
 	 *   The context to be used as a starting point in case of a relative path
@@ -1052,7 +1232,7 @@ sap.ui.define([
 	ODataModel.prototype.resolve = function (sPath, oContext) {
 		var sResolvedPath;
 
-		if (sPath[0] === "/") {
+		if (sPath && sPath[0] === "/") {
 			sResolvedPath = sPath;
 		} else if (oContext) {
 			if (sPath) {
@@ -1100,7 +1280,9 @@ sap.ui.define([
 	 *   A promise on the outcome of the HTTP request resolving with <code>undefined</code>; it is
 	 *   rejected with an error if the batch request itself fails
 	 * @throws {Error}
-	 *   If the given group ID is not an application group ID
+	 *   If the given group ID is not an application group ID or has
+	 *   {@link sap.ui.model.odata.v4.SubmitMode.Auto} or
+	 *   {@link sap.ui.model.odata.v4.SubmitMode.Direct}
 	 *
 	 * @public
 	 * @since 1.37.0
@@ -1108,7 +1290,7 @@ sap.ui.define([
 	ODataModel.prototype.submitBatch = function (sGroupId) {
 		var that = this;
 
-		this.checkGroupId(sGroupId, true);
+		this.checkDeferredGroupId(sGroupId);
 
 		return new Promise(function (resolve) {
 			sap.ui.getCore().addPrerenderingTask(function () {
@@ -1129,4 +1311,4 @@ sap.ui.define([
 	};
 
 	return ODataModel;
-}, /* bExport= */ true);
+});

@@ -3,8 +3,30 @@
  */
 
 // Provides control sap.m.Tree.
-sap.ui.define(['jquery.sap.global', './ListBase', './TreeItemBase', './library', 'sap/ui/core/Element', 'sap/ui/model/ClientTreeBindingAdapter', 'sap/ui/model/TreeBindingCompatibilityAdapter', 'sap/ui/base/ManagedObjectMetadata', 'sap/ui/model/odata/ODataTreeBinding', 'sap/ui/model/odata/v2/ODataTreeBinding', 'sap/ui/model/ClientTreeBinding'],
-	function(jQuery, ListBase, TreeItemBase, library, Element, ClientTreeBindingAdapter, TreeBindingCompatibilityAdapter, ManagedObjectMetadata, ODataTreeBinding, V2ODataTreeBinding, ClientTreeBinding) {
+sap.ui.define([
+	'jquery.sap.global',
+	'./ListBase',
+	'./TreeItemBase',
+	'./library',
+	'sap/ui/model/ClientTreeBindingAdapter',
+	'sap/ui/model/TreeBindingCompatibilityAdapter',
+	'sap/ui/model/odata/ODataTreeBinding',
+	'sap/ui/model/odata/v2/ODataTreeBinding',
+	'sap/ui/model/ClientTreeBinding',
+	'./TreeRenderer'
+],
+function(
+	jQuery,
+	ListBase,
+	TreeItemBase,
+	library,
+	ClientTreeBindingAdapter,
+	TreeBindingCompatibilityAdapter,
+	ODataTreeBinding,
+	V2ODataTreeBinding,
+	ClientTreeBinding,
+	TreeRenderer
+	) {
 	"use strict";
 
 
@@ -286,17 +308,79 @@ sap.ui.define(['jquery.sap.global', './ListBase', './TreeItemBase', './library',
 		return this;
 	};
 
+	/**
+	 *
+	 * Expands one item or multiple items.
+	 *
+	 * @return {sap.m.Tree} A reference to the Tree control
+	 * @public
+	 * @param {int|[int]} vParam The index or indices of the item to be expanded
+	 * @since 1.54.0
+	 */
+	Tree.prototype.expand = function(vParam) {
+		var aIndices = [];
+		if (typeof vParam === "number") {
+			aIndices.push(vParam);
+		} else if ( typeof vParam === "object") {
+			//sort
+			aIndices = vParam.sort().reverse();
+		}
+
+		var oBinding = this.getBinding("items"),
+			i = 0;
+
+		for (i = 0; i < aIndices.length - 1; i++) {
+			oBinding.expand(aIndices[i], true);
+		}
+		// trigger change
+		oBinding.expand(aIndices[i], false);
+
+		return this;
+	};
+
+	/**
+	 *
+	 * Collapses one item or multiple items.
+	 *
+	 * @return {sap.m.Tree} A reference to the Tree control
+	 * @public
+	 * @param {int|[int]} vParam The index or indices of the tree items to be collapsed
+	 * @since 1.54.0
+	 */
+	Tree.prototype.collapse = function(vParam) {
+		var aIndices = [];
+		if (typeof vParam === "number") {
+			aIndices.push(vParam);
+		} else if ( typeof vParam === "object") {
+			aIndices = vParam.sort().reverse();
+		}
+		var oBinding = this.getBinding("items"),
+			i = 0;
+
+		for (i = 0; i < aIndices.length - 1; i++) {
+			oBinding.collapse(aIndices[i], true);
+		}
+		// trigger change
+		oBinding.collapse(aIndices[i], false);
+
+		return this;
+	};
+
 	Tree.prototype.getAccessibilityType = function() {
 		return sap.ui.getCore().getLibraryResourceBundle("sap.m").getText("ACC_CTR_TYPE_TREE");
 	};
 
 	Tree.prototype.getAccessbilityPosition = function(oItem) {
-		var iSetSize = 0,
-			iPosInset = 0,
+		var iSetSize,
+			iPosInset,
 			oNodeContext = oItem.getItemNodeContext();
 
-		iSetSize = oNodeContext.parent.children.length;
-		iPosInset = oNodeContext.positionInParent + 1;
+		if (oNodeContext.parent) {
+			iSetSize = oNodeContext.parent.children.length;
+		}
+		if (oNodeContext.positionInParent) {
+			iPosInset = oNodeContext.positionInParent + 1;
+		}
 
 		return {
 			setSize: iSetSize,
@@ -304,6 +388,15 @@ sap.ui.define(['jquery.sap.global', './ListBase', './TreeItemBase', './library',
 		};
 	};
 
+	Tree.prototype.onItemLongDragOver = function(oItem) {
+		var iIndex = this.indexOfItem(oItem);
+		this.getBinding("items").expand(iIndex);
+	};
+
+	Tree.prototype.isGrouped = function() {
+		return false;
+	};
+
 	return Tree;
 
-}, /* bExport= */ true);
+});

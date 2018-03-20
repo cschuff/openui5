@@ -2,19 +2,19 @@
  * ${copyright}
  */
 
-/*global JSZip, URI *///declare unusual global vars for JSLint/SAPUI5 validation
-sap.ui.define(['jquery.sap.global', 'sap/ui/Device',
+/*global JSZip, URI */
+
+sap.ui.define(['jquery.sap.global',
 	'sap/ui/core/routing/History',
 	'sap/ui/core/Component', 'sap/ui/core/UIComponent', 'sap/ui/core/mvc/Controller',
 	'sap/ui/model/json/JSONModel',
-	'sap/m/MessageToast',
 	'../data'],
-	function (jQuery, Device, History, Component, UIComponent, Controller, JSONModel, MessageToast, data) {
+	function (jQuery, History, Component, UIComponent, Controller, JSONModel, data) {
 	"use strict";
 
 	return Controller.extend("sap.ui.demokit.explored.view.code", {
 
-		_aMockFiles : ["products.json", "supplier.json", "img.json"],
+		_aMockFiles : ["products.json", "supplier.json", "img.json", "countriesCollection.json"],
 
 		onInit : function () {
 			this.router = UIComponent.getRouterFor(this);
@@ -92,7 +92,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/Device',
 			oJSONModel.refresh(true);
 
 			// scroll to top of page
-			var page = this.getView().byId("page");
+			var page = this.byId("page");
 			page.scrollTo(0);
 		},
 

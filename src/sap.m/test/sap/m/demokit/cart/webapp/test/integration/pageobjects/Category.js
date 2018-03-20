@@ -6,7 +6,14 @@ sap.ui.define([
 	'sap/ui/test/matchers/BindingPath',
 	'sap/ui/test/matchers/Properties',
 	'sap/ui/test/actions/Press'
-], function (Opa5, PropertyStrictEquals, AggregationFilled, AggregationLengthEquals, BindingPath, Properties,Press) {
+], function (
+	Opa5,
+	PropertyStrictEquals,
+	AggregationFilled,
+	AggregationLengthEquals,
+	BindingPath,
+	Properties,
+	Press) {
 	"use strict";
 
 	Opa5.createPageObjects({
@@ -148,6 +155,13 @@ sap.ui.define([
 						matchers: new Properties({type: "Back"}),
 						actions: new Press(),
 						errorMessage: "The back button was not found and could not be pressed"
+					});
+				},
+				iPressTheBackButtonInProduct: function () {
+					return this.waitFor({
+						id: "page",
+						actions: new Press(),
+						errorMessage: "The nav back button was not displayed"
 					});
 				},
 				//Back Button in filter dialog

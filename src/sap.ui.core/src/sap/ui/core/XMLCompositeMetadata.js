@@ -22,6 +22,8 @@ sap.ui.define([
 		None: false
 	};
 
+	var mFragmentCache = {};
+
 	/*
 	 *
 	 * Creates a new metadata object that describes a subclass of XMLComposite.
@@ -54,7 +56,15 @@ sap.ui.define([
 			}
 			if (!this._fragment && oClassInfo.fragment) {
 				try {
-					this._fragment = XMLTemplateProcessor.loadTemplate(oClassInfo.fragment, "control");
+					if (!this._fragment) {
+						this._fragment = this._loadFragment(oClassInfo.fragment, "control");
+					}
+					if (oClassInfo.aggregationFragments) {
+						this._aggregationFragments = {};
+						oClassInfo.aggregationFragments.forEach(function(sAggregationFragment) {
+							this._aggregationFragments[sAggregationFragment] = this._loadFragment(oClassInfo.fragment + "_" + sAggregationFragment, "aggregation");
+						}.bind(this));
+					}
 				} catch (e) {
 					if (!oClassInfo.fragmentUnspecified) {
 						// fragment xml was explicitly specified so we expect to find something !
@@ -152,6 +162,22 @@ sap.ui.define([
 			this._mMandatoryAggregations = mMandatory;
 		}
 		return this._mMandatoryAggregations;
+	};
+
+	XMLCompositeMetadata.prototype.requireFor = function (oElement) {
+		var sModuleNames = oElement.getAttribute("template:require");
+		if (sModuleNames) {
+			jQuery.sap.require.apply(jQuery.sap, sModuleNames.split(" "));
+		}
+	};
+
+	XMLCompositeMetadata.prototype._loadFragment = function (sFragmentName, sExtension) {
+		if (!mFragmentCache[sFragmentName]) {
+			mFragmentCache[sFragmentName] = XMLTemplateProcessor.loadTemplate(sFragmentName, sExtension);
+			this.requireFor(mFragmentCache[sFragmentName]);
+		}
+
+		return mFragmentCache[sFragmentName];
 	};
 
 	return XMLCompositeMetadata;
